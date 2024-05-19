@@ -1,0 +1,13 @@
+(defn (head l) (vec-get l 0))
+
+(defn (tail l) (vec-get l 1))
+
+(defn (map f xs)
+ (if (= xs false)
+   false
+   (vec (f (head xs)) (map f (tail xs)))))
+
+(let (off input)
+(let (inc (fn (x) (+ x off)))
+(let (xs  (vec 10 (vec 20 (vec 30 false))))
+  (map inc xs))))

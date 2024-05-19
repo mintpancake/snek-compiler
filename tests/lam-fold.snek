@@ -1,0 +1,19 @@
+
+(defn (head l) (vec-get l 0))
+
+(defn (tail l) (vec-get l 1))
+
+(defn (emp l) (= l false))
+
+(defn (range i j)
+  (if (= i j)
+    false
+    (vec i (range (+ i 1) j))))
+
+(defn (fold f acc xs)
+  (if (emp xs)
+    acc
+    (fold f (f acc (head xs)) (tail xs))))
+
+(let (l (range 1 (+ input 1)))
+  (fold (fn (x y) (+ x y)) 0 l))

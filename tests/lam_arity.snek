@@ -1,0 +1,5 @@
+(let (f (fn (f it) (it 5)))
+   (let (add (fn (x y) (+ x y)))
+      (f add)
+   )
+)

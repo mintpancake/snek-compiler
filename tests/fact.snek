@@ -1,0 +1,15 @@
+(defn (fact n)
+  (let*
+    ((i 1) (acc 1))
+    (loop
+      (if (<= i n)
+        (block
+          (set! acc (* acc i))
+          (set! i (+ i 1))
+        )
+        (break acc)
+      )
+    )
+  )
+)
+(fact input)

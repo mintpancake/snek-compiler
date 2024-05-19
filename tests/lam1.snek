@@ -1,0 +1,6 @@
+(defn (f it)
+  (it 5))
+
+(let (foo (fn (z) (* z 10))) 
+  (f foo)
+)

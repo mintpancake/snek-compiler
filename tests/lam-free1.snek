@@ -1,0 +1,5 @@
+(let* ((add (fn (n) (fn (m) (+ n m))))
+       (f   (fn (it) (it 5)))
+       (plus1  (add 1))
+       (plus10 (add 10)))
+  (vec (f plus1) (f plus10)))
