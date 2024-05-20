@@ -44,17 +44,23 @@ const MIN_NUM: i64 = -4611686018427387904;
 const NIL_LIT: i64 = 1;
 const TRUE_LIT: i64 = 7;
 const FALSE_LIT: i64 = 3;
+
 const TAG_MASK_1: i64 = 1;
 const TAG_MASK_2: i64 = 3;
+const TAG_MASK_3: i64 = 7;
 const PTR_MASK: i64 = -8;
+
 const NUM_TAG: i64 = 0;
 const BOOL_TAG: i64 = 3;
 const PTR_TAG: i64 = 1;
+const CLS_TAG: i64 = 5;
 
 const NOT_A_NUM_ERROR: i64 = 1;
 const TYPE_MISMATCH_ERROR: i64 = 2;
 const OVERFLOW_ERROR: i64 = 3;
 const OUT_OF_BOUNDS_ERROR: i64 = 4;
+const ARITY_MISMATCH_ERROR: i64 = 5;
+const NOT_A_FUNCTION_ERROR: i64 = 6;
 
 const LABEL_ERROR: &str = "label_error";
 
@@ -62,7 +68,7 @@ const FUN_SNEK_ERROR: &str = "snek_error";
 const FUN_SNEK_PRINT: &str = "snek_print";
 const OUR_CODE: &str = "our_code_starts_here";
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum Val {
     Reg(Reg),
     Imm(i64),
@@ -70,7 +76,7 @@ enum Val {
     Label(String),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum Reg {
     RAX,
     RCX,
@@ -82,7 +88,7 @@ enum Reg {
     R12,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum Instr {
     IMov(Val, Val),
     IAdd(Val, Val),
@@ -102,14 +108,13 @@ enum Instr {
     JLE(Val),
     JO(Val),
     AND(Val, Val),
-    OR(Val, Val),
     Call(Val),
     Push(Val),
     Pop(Val),
     Ret,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum Op1 {
     Add1,
     Sub1,
@@ -119,7 +124,7 @@ enum Op1 {
     Print,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum Op2 {
     Plus,
     Minus,
@@ -131,14 +136,14 @@ enum Op2 {
     LessEqual,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Defn {
     pub name: Option<String>,
     pub params: Vec<String>,
     pub body: Box<Expr>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum Expr {
     NIL,
     Input,
@@ -160,7 +165,7 @@ enum Expr {
     VecSet(Box<Expr>, Box<Expr>, Box<Expr>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum Prog {
     Prog(Vec<Expr>, Expr),
 }
@@ -435,7 +440,7 @@ fn to_bool_literal(b: bool) -> i64 {
 }
 
 fn compile_num_type_check(v: Val, instrs: &mut Vec<Instr>) {
-    instrs.push(Instr::IMov(Val::Reg(Reg::RCX), v));
+    instrs.push(Instr::IMov(Val::Reg(Reg::RCX), v.clone()));
     instrs.push(Instr::AND(Val::Reg(Reg::RCX), Val::Imm(TAG_MASK_1)));
     instrs.push(Instr::CMP(Val::Reg(Reg::RCX), Val::Imm(NUM_TAG)));
     instrs.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Imm(NOT_A_NUM_ERROR)));
@@ -443,8 +448,8 @@ fn compile_num_type_check(v: Val, instrs: &mut Vec<Instr>) {
 }
 
 fn compile_ptr_type_check(v: Val, instrs: &mut Vec<Instr>) {
-    instrs.push(Instr::IMov(Val::Reg(Reg::RCX), v));
-    instrs.push(Instr::AND(Val::Reg(Reg::RCX), Val::Imm(TAG_MASK_2)));
+    instrs.push(Instr::IMov(Val::Reg(Reg::RCX), v.clone()));
+    instrs.push(Instr::AND(Val::Reg(Reg::RCX), Val::Imm(TAG_MASK_3)));
     instrs.push(Instr::CMP(Val::Reg(Reg::RCX), Val::Imm(PTR_TAG)));
     instrs.push(Instr::IMov(
         Val::Reg(Reg::RDI),
@@ -454,7 +459,7 @@ fn compile_ptr_type_check(v: Val, instrs: &mut Vec<Instr>) {
 }
 
 fn compile_nil_ptr_check(v: Val, instrs: &mut Vec<Instr>) {
-    instrs.push(Instr::IMov(Val::Reg(Reg::RCX), v));
+    instrs.push(Instr::IMov(Val::Reg(Reg::RCX), v.clone()));
     instrs.push(Instr::CMP(Val::Reg(Reg::RCX), Val::Imm(NIL_LIT)));
     instrs.push(Instr::IMov(
         Val::Reg(Reg::RDI),
@@ -463,9 +468,36 @@ fn compile_nil_ptr_check(v: Val, instrs: &mut Vec<Instr>) {
     instrs.push(Instr::JE(Val::Label(LABEL_ERROR.to_string())));
 }
 
+fn compile_cls_type_check(v: Val, instrs: &mut Vec<Instr>) {
+    instrs.push(Instr::IMov(Val::Reg(Reg::RCX), v.clone()));
+    instrs.push(Instr::AND(Val::Reg(Reg::RCX), Val::Imm(TAG_MASK_3)));
+    instrs.push(Instr::CMP(Val::Reg(Reg::RCX), Val::Imm(CLS_TAG)));
+    instrs.push(Instr::IMov(
+        Val::Reg(Reg::RDI),
+        Val::Imm(NOT_A_FUNCTION_ERROR),
+    ));
+    instrs.push(Instr::JNE(Val::Label(LABEL_ERROR.to_string())));
+}
+
+fn compile_cls_check(v: Val, len: i64, instrs: &mut Vec<Instr>) {
+    compile_cls_type_check(v.clone(), instrs);
+    instrs.push(Instr::IMov(Val::Reg(Reg::RCX), v.clone()));
+    instrs.push(Instr::ISub(Val::Reg(Reg::RCX), Val::Imm(CLS_TAG)));
+    instrs.push(Instr::IMov(Val::Reg(Reg::RCX), Val::RegOffset(Reg::RCX, 1)));
+    instrs.push(Instr::CMP(
+        Val::Reg(Reg::RCX),
+        Val::Imm(to_num_literal(len)),
+    ));
+    instrs.push(Instr::IMov(
+        Val::Reg(Reg::RDI),
+        Val::Imm(ARITY_MISMATCH_ERROR),
+    ));
+    instrs.push(Instr::JNE(Val::Label(LABEL_ERROR.to_string())));
+}
+
 fn compile_out_of_bound_check(v: Val, ptr: Val, instrs: &mut Vec<Instr>) {
-    instrs.push(Instr::IMov(Val::Reg(Reg::RCX), v));
-    instrs.push(Instr::IMov(Val::Reg(Reg::RDX), ptr));
+    instrs.push(Instr::IMov(Val::Reg(Reg::RCX), v.clone()));
+    instrs.push(Instr::IMov(Val::Reg(Reg::RDX), ptr.clone()));
     instrs.push(Instr::IMov(Val::Reg(Reg::RDX), Val::RegOffset(Reg::RDX, 0)));
     instrs.push(Instr::CMP(Val::Reg(Reg::RCX), Val::Reg(Reg::RDX)));
     instrs.push(Instr::IMov(
@@ -478,23 +510,68 @@ fn compile_out_of_bound_check(v: Val, ptr: Val, instrs: &mut Vec<Instr>) {
 fn compile_same_type_check(v1: Val, v2: Val, label_seq: &mut i32, instrs: &mut Vec<Instr>) {
     let my_label_seq = *label_seq;
     *label_seq += 1;
-    instrs.push(Instr::IMov(Val::Reg(Reg::RCX), v1));
-    instrs.push(Instr::AND(Val::Reg(Reg::RCX), Val::Imm(TAG_MASK_2)));
-    instrs.push(Instr::IMov(Val::Reg(Reg::RDX), v2));
-    instrs.push(Instr::AND(Val::Reg(Reg::RDX), Val::Imm(TAG_MASK_2)));
-    instrs.push(Instr::CMP(Val::Reg(Reg::RCX), Val::Reg(Reg::RDX)));
-    instrs.push(Instr::JE(Val::Label(format!("label_end_{}", my_label_seq))));
+    instrs.push(Instr::LABEL(format!("label_check_num_{}", my_label_seq)));
+    instrs.push(Instr::IMov(Val::Reg(Reg::RCX), v1.clone()));
     instrs.push(Instr::AND(Val::Reg(Reg::RCX), Val::Imm(TAG_MASK_1)));
-    instrs.push(Instr::AND(Val::Reg(Reg::RDX), Val::Imm(TAG_MASK_1)));
-    instrs.push(Instr::OR(Val::Reg(Reg::RCX), Val::Reg(Reg::RDX)));
     instrs.push(Instr::CMP(Val::Reg(Reg::RCX), Val::Imm(NUM_TAG)));
-    instrs.push(Instr::JE(Val::Label(format!("label_end_{}", my_label_seq))));
+    instrs.push(Instr::JNE(Val::Label(format!(
+        "label_check_bool_{}",
+        my_label_seq
+    ))));
+    instrs.push(Instr::IMov(Val::Reg(Reg::RDX), v2.clone()));
+    instrs.push(Instr::AND(Val::Reg(Reg::RDX), Val::Imm(TAG_MASK_1)));
+    instrs.push(Instr::CMP(Val::Reg(Reg::RDX), Val::Imm(NUM_TAG)));
+    instrs.push(Instr::JE(Val::Label(format!(
+        "label_check_end_{}",
+        my_label_seq
+    ))));
+    instrs.push(Instr::JNE(Val::Label(format!(
+        "label_check_error_{}",
+        my_label_seq
+    ))));
+
+    instrs.push(Instr::LABEL(format!("label_check_bool_{}", my_label_seq)));
+    instrs.push(Instr::IMov(Val::Reg(Reg::RCX), v1.clone()));
+    instrs.push(Instr::AND(Val::Reg(Reg::RCX), Val::Imm(TAG_MASK_2)));
+    instrs.push(Instr::CMP(Val::Reg(Reg::RCX), Val::Imm(BOOL_TAG)));
+    instrs.push(Instr::JNE(Val::Label(format!(
+        "label_check_ptr_cls_{}",
+        my_label_seq
+    ))));
+    instrs.push(Instr::IMov(Val::Reg(Reg::RDX), v2.clone()));
+    instrs.push(Instr::AND(Val::Reg(Reg::RDX), Val::Imm(TAG_MASK_2)));
+    instrs.push(Instr::CMP(Val::Reg(Reg::RDX), Val::Imm(BOOL_TAG)));
+    instrs.push(Instr::JE(Val::Label(format!(
+        "label_check_end_{}",
+        my_label_seq
+    ))));
+    instrs.push(Instr::JNE(Val::Label(format!(
+        "label_check_error_{}",
+        my_label_seq
+    ))));
+
+    instrs.push(Instr::LABEL(format!(
+        "label_check_ptr_cls_{}",
+        my_label_seq
+    )));
+    instrs.push(Instr::IMov(Val::Reg(Reg::RCX), v1.clone()));
+    instrs.push(Instr::AND(Val::Reg(Reg::RCX), Val::Imm(TAG_MASK_3)));
+    instrs.push(Instr::IMov(Val::Reg(Reg::RDX), v2.clone()));
+    instrs.push(Instr::AND(Val::Reg(Reg::RDX), Val::Imm(TAG_MASK_3)));
+    instrs.push(Instr::CMP(Val::Reg(Reg::RCX), Val::Reg(Reg::RDX)));
+    instrs.push(Instr::JE(Val::Label(format!(
+        "label_check_end_{}",
+        my_label_seq
+    ))));
+
+    instrs.push(Instr::LABEL(format!("label_check_error_{}", my_label_seq)));
     instrs.push(Instr::IMov(
         Val::Reg(Reg::RDI),
         Val::Imm(TYPE_MISMATCH_ERROR),
     ));
-    instrs.push(Instr::JNE(Val::Label(LABEL_ERROR.to_string())));
-    instrs.push(Instr::LABEL(format!("label_end_{}", my_label_seq)));
+    instrs.push(Instr::JMP(Val::Label(LABEL_ERROR.to_string())));
+
+    instrs.push(Instr::LABEL(format!("label_check_end_{}", my_label_seq)));
 }
 
 fn compile_overflow_check(instrs: &mut Vec<Instr>) {
@@ -533,10 +610,10 @@ fn compile_expr(
             if !env.contains_key(x) {
                 panic!("Unbound variable identifier {}", x);
             }
-            let x_ptr = env.get(x).unwrap();
+            let x_ptr = *env.get(x).unwrap();
             instrs.push(Instr::IMov(
                 Val::Reg(Reg::RAX),
-                Val::RegOffset(Reg::RBP, *x_ptr),
+                Val::RegOffset(Reg::RBP, x_ptr),
             ));
         }
         Expr::Let(bs, e1) => {
@@ -1102,9 +1179,9 @@ fn compile_expr(
                 is_tail_call_available,
                 instrs,
             );
-            let x_ptr = env.get(x).unwrap();
+            let x_ptr = *env.get(x).unwrap();
             instrs.push(Instr::IMov(
-                Val::RegOffset(Reg::RBP, *x_ptr),
+                Val::RegOffset(Reg::RBP, x_ptr),
                 Val::Reg(Reg::RAX),
             ));
             if x == curr_fun {
@@ -1151,6 +1228,10 @@ fn compile_expr(
             }
 
             if fun == curr_fun && is_tail_call && *is_tail_call_available {
+                instrs.push(Instr::IMov(Val::Reg(Reg::RAX), Val::RegOffset(Reg::RBP, 1)));
+                compile_cls_check(Val::Reg(Reg::RAX), es.len() as i64, instrs);
+                instrs.push(Instr::IMov(Val::Reg(Reg::RCX), Val::Reg(Reg::RAX)));
+
                 for i in 0..es.len() {
                     instrs.push(Instr::IMov(
                         Val::Reg(Reg::RAX),
@@ -1161,9 +1242,19 @@ fn compile_expr(
                         Val::Reg(Reg::RAX),
                     ));
                 }
-                instrs.push(Instr::IMov(Val::Reg(Reg::RAX), Val::RegOffset(Reg::RBP, 1)));
-                instrs.push(Instr::JMP(Val::Reg(Reg::RAX)));
+
+                instrs.push(Instr::ISub(Val::Reg(Reg::RCX), Val::Imm(CLS_TAG)));
+                instrs.push(Instr::IMov(Val::Reg(Reg::RCX), Val::RegOffset(Reg::RCX, 0)));
+                instrs.push(Instr::JMP(Val::Reg(Reg::RCX)));
             } else {
+                let fun_ptr = *env.get(fun).unwrap();
+                instrs.push(Instr::IMov(
+                    Val::Reg(Reg::RAX),
+                    Val::RegOffset(Reg::RBP, fun_ptr),
+                ));
+                compile_cls_check(Val::Reg(Reg::RAX), es.len() as i64, instrs);
+                instrs.push(Instr::IMov(Val::Reg(Reg::RCX), Val::Reg(Reg::RAX)));
+
                 for i in (0..es.len()).rev() {
                     instrs.push(Instr::IMov(
                         Val::Reg(Reg::RAX),
@@ -1171,12 +1262,10 @@ fn compile_expr(
                     ));
                     instrs.push(Instr::Push(Val::Reg(Reg::RAX)));
                 }
-                let fun_ptr = env.get(fun).unwrap();
-                instrs.push(Instr::IMov(
-                    Val::Reg(Reg::RAX),
-                    Val::RegOffset(Reg::RBP, *fun_ptr),
-                ));
-                instrs.push(Instr::Call(Val::Reg(Reg::RAX)));
+                
+                instrs.push(Instr::ISub(Val::Reg(Reg::RCX), Val::Imm(CLS_TAG)));
+                instrs.push(Instr::IMov(Val::Reg(Reg::RCX), Val::RegOffset(Reg::RCX, 0)));
+                instrs.push(Instr::Call(Val::Reg(Reg::RCX)));
                 instrs.push(Instr::IAdd(
                     Val::Reg(Reg::RSP),
                     Val::Imm(8 * es.len() as i64),
@@ -1220,7 +1309,7 @@ fn compile_expr(
                 ));
             }
             instrs.push(Instr::IMov(Val::Reg(Reg::RAX), Val::Reg(Reg::R12)));
-            instrs.push(Instr::IAdd(Val::Reg(Reg::RAX), Val::Imm(1)));
+            instrs.push(Instr::IAdd(Val::Reg(Reg::RAX), Val::Imm(PTR_TAG)));
             instrs.push(Instr::IAdd(
                 Val::Reg(Reg::R12),
                 Val::Imm(8 * (1 + es.len() as i64)),
@@ -1240,7 +1329,7 @@ fn compile_expr(
             );
             compile_ptr_type_check(Val::Reg(Reg::RAX), instrs);
             compile_nil_ptr_check(Val::Reg(Reg::RAX), instrs);
-            instrs.push(Instr::ISub(Val::Reg(Reg::RAX), Val::Imm(1)));
+            instrs.push(Instr::ISub(Val::Reg(Reg::RAX), Val::Imm(PTR_TAG)));
             instrs.push(Instr::IMov(
                 Val::RegOffset(Reg::RBP, st_ptr),
                 Val::Reg(Reg::RAX),
@@ -1285,7 +1374,7 @@ fn compile_expr(
             );
             compile_ptr_type_check(Val::Reg(Reg::RAX), instrs);
             compile_nil_ptr_check(Val::Reg(Reg::RAX), instrs);
-            instrs.push(Instr::ISub(Val::Reg(Reg::RAX), Val::Imm(1)));
+            instrs.push(Instr::ISub(Val::Reg(Reg::RAX), Val::Imm(PTR_TAG)));
             instrs.push(Instr::IMov(
                 Val::RegOffset(Reg::RBP, st_ptr),
                 Val::Reg(Reg::RAX),
@@ -1338,6 +1427,21 @@ fn compile_expr(
     }
 }
 
+fn compile_closure(label: &str, arity: i64, instrs: &mut Vec<Instr>) {
+    instrs.push(Instr::IMov(
+        Val::Reg(Reg::RAX),
+        Val::Label(label.to_string()),
+    ));
+    instrs.push(Instr::IMov(Val::RegOffset(Reg::R12, 0), Val::Reg(Reg::RAX)));
+    instrs.push(Instr::IMov(
+        Val::RegOffset(Reg::R12, 1),
+        Val::Imm(to_num_literal(arity)),
+    ));
+    instrs.push(Instr::IMov(Val::Reg(Reg::RAX), Val::Reg(Reg::R12)));
+    instrs.push(Instr::IAdd(Val::Reg(Reg::RAX), Val::Imm(5)));
+    instrs.push(Instr::IAdd(Val::Reg(Reg::R12), Val::Imm(8 * (1 + arity))));
+}
+
 fn compile_defn(d: &Defn, label_seq: &mut i32, instrs: &mut Vec<Instr>) {
     let Defn {
         name,
@@ -1373,31 +1477,20 @@ fn compile_defn(d: &Defn, label_seq: &mut i32, instrs: &mut Vec<Instr>) {
     for (i, p) in params.iter().enumerate() {
         new_env = new_env.update(p.clone(), -(i as i32 + 2));
     }
-    instrs.push(Instr::IMov(
-        Val::Reg(Reg::RAX),
-        Val::Label(format!("fun_body_{}", fun)),
-    ));
+    compile_closure(&format!("fun_body_{}", fun), params.len() as i64, instrs);
     instrs.push(Instr::IMov(Val::RegOffset(Reg::RBP, 1), Val::Reg(Reg::RAX)));
-    instrs.push(Instr::IMov(
-        Val::Reg(Reg::RAX),
-        Val::Label(format!("fun_start_{}", fun)),
-    ));
+    compile_closure(&format!("fun_start_{}", fun), params.len() as i64, instrs);
     instrs.push(Instr::IMov(Val::RegOffset(Reg::RBP, 2), Val::Reg(Reg::RAX)));
     new_env = new_env.update(fun.clone(), 2);
 
     instrs.push(Instr::LABEL(format!("fun_body_{}", fun)));
-    compile_expr(
-        e, &new_env, 3, label_seq, -1, &fun, true, &mut true, instrs,
-    );
+    compile_expr(e, &new_env, 3, label_seq, -1, &fun, true, &mut true, instrs);
 
     instrs.push(Instr::LABEL(format!("fun_end_{}", fun)));
     compile_exit(instrs);
 
     instrs.push(Instr::LABEL(format!("fun_finish_{}", fun)));
-    instrs.push(Instr::IMov(
-        Val::Reg(Reg::RAX),
-        Val::Label(format!("fun_start_{}", fun)),
-    ));
+    compile_closure(&format!("fun_start_{}", fun), params.len() as i64, instrs);
 }
 
 fn compile_entry(instrs: &mut Vec<Instr>, stack_size: i32) {
@@ -1555,7 +1648,6 @@ fn instr_to_str(i: &Instr) -> String {
         Instr::JLE(l) => format!("  jle {}", val_to_str(l)),
         Instr::JO(l) => format!("  jo {}", val_to_str(l)),
         Instr::AND(v1, v2) => format!("  and {}, {}", val_to_str(v1), val_to_str(v2)),
-        Instr::OR(v1, v2) => format!("  or {}, {}", val_to_str(v1), val_to_str(v2)),
         Instr::Call(f) => format!("  call {}", val_to_str(f)),
         Instr::Push(v) => format!("  push {}", val_to_str(v)),
         Instr::Pop(v) => format!("  pop {}", val_to_str(v)),
@@ -1579,6 +1671,7 @@ fn val_to_str(v: &Val) -> String {
         Val::RegOffset(r, n) => match r {
             Reg::RSP => format!("qword [rsp - 8*{}]", n),
             Reg::RBP => format!("qword [rbp - 8*{}]", n),
+            Reg::RAX => format!("qword [rax + 8*{}]", n),
             Reg::RCX => format!("qword [rcx + 8*{}]", n),
             Reg::RDX => format!("qword [rdx + 8*{}]", n),
             Reg::R12 => format!("qword [r12 + 8*{}]", n),

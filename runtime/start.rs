@@ -19,13 +19,21 @@ pub fn snek_error(errcode: i64) {
     const TYPE_MISMATCH_ERROR: i64 = 2;
     const OVERFLOW_ERROR: i64 = 3;
     const OUT_OF_BOUNDS_ERROR: i64 = 4;
+    const ARITY_MISMATCH_ERROR: i64 = 5;
+    const NOT_A_FUNCTION_ERROR: i64 = 6;
 
-    if errcode == NOT_A_NUM_ERROR || errcode == TYPE_MISMATCH_ERROR {
-        eprintln!("invalid argument");
+    if errcode == NOT_A_NUM_ERROR {
+        eprintln!("invalid argument: not a number");
+    } else if errcode == TYPE_MISMATCH_ERROR {
+        eprintln!("invalid argument: type mismatch");
     } else if errcode == OVERFLOW_ERROR {
         eprintln!("overflow");
     } else if errcode == OUT_OF_BOUNDS_ERROR {
         eprintln!("index out of bounds");
+    } else if errcode == ARITY_MISMATCH_ERROR {
+        eprintln!("arity mismatch");
+    } else if errcode == NOT_A_FUNCTION_ERROR {
+        eprintln!("not a function");
     } else {
         eprintln!("unknown error code: {}", errcode);
     }
