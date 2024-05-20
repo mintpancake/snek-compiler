@@ -510,7 +510,7 @@ fn compile_expr(
     loop_seq: i32,
     curr_fun: &str,
     is_tail_call: bool,
-    tail_call_overwritten: &mut bool,
+    is_tail_call_available: &mut bool,
     instrs: &mut Vec<Instr>,
 ) {
     match e {
@@ -559,7 +559,7 @@ fn compile_expr(
                     loop_seq,
                     curr_fun,
                     false,
-                    tail_call_overwritten,
+                    is_tail_call_available,
                     instrs,
                 );
                 instrs.push(Instr::IMov(
@@ -578,7 +578,7 @@ fn compile_expr(
                 loop_seq,
                 curr_fun,
                 new_is_tail_call,
-                tail_call_overwritten,
+                is_tail_call_available,
                 instrs,
             );
         }
@@ -592,7 +592,7 @@ fn compile_expr(
                     loop_seq,
                     curr_fun,
                     false,
-                    tail_call_overwritten,
+                    is_tail_call_available,
                     instrs,
                 );
                 compile_num_type_check(Val::Reg(Reg::RAX), instrs);
@@ -608,7 +608,7 @@ fn compile_expr(
                     loop_seq,
                     curr_fun,
                     false,
-                    tail_call_overwritten,
+                    is_tail_call_available,
                     instrs,
                 );
                 compile_num_type_check(Val::Reg(Reg::RAX), instrs);
@@ -624,7 +624,7 @@ fn compile_expr(
                     loop_seq,
                     curr_fun,
                     false,
-                    tail_call_overwritten,
+                    is_tail_call_available,
                     instrs,
                 );
                 compile_num_type_check(Val::Reg(Reg::RAX), instrs);
@@ -642,7 +642,7 @@ fn compile_expr(
                     loop_seq,
                     curr_fun,
                     false,
-                    tail_call_overwritten,
+                    is_tail_call_available,
                     instrs,
                 );
                 instrs.push(Instr::AND(Val::Reg(Reg::RAX), Val::Imm(TAG_MASK_1)));
@@ -663,7 +663,7 @@ fn compile_expr(
                     loop_seq,
                     curr_fun,
                     false,
-                    tail_call_overwritten,
+                    is_tail_call_available,
                     instrs,
                 );
                 instrs.push(Instr::AND(Val::Reg(Reg::RAX), Val::Imm(TAG_MASK_2)));
@@ -682,7 +682,7 @@ fn compile_expr(
                     loop_seq,
                     curr_fun,
                     false,
-                    tail_call_overwritten,
+                    is_tail_call_available,
                     instrs,
                 );
                 instrs.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Reg(Reg::RAX)));
@@ -699,7 +699,7 @@ fn compile_expr(
                     loop_seq,
                     curr_fun,
                     false,
-                    tail_call_overwritten,
+                    is_tail_call_available,
                     instrs,
                 );
                 compile_num_type_check(Val::Reg(Reg::RAX), instrs);
@@ -715,7 +715,7 @@ fn compile_expr(
                     loop_seq,
                     curr_fun,
                     false,
-                    tail_call_overwritten,
+                    is_tail_call_available,
                     instrs,
                 );
                 compile_num_type_check(Val::Reg(Reg::RAX), instrs);
@@ -734,7 +734,7 @@ fn compile_expr(
                     loop_seq,
                     curr_fun,
                     false,
-                    tail_call_overwritten,
+                    is_tail_call_available,
                     instrs,
                 );
                 compile_num_type_check(Val::Reg(Reg::RAX), instrs);
@@ -750,7 +750,7 @@ fn compile_expr(
                     loop_seq,
                     curr_fun,
                     false,
-                    tail_call_overwritten,
+                    is_tail_call_available,
                     instrs,
                 );
                 compile_num_type_check(Val::Reg(Reg::RAX), instrs);
@@ -769,7 +769,7 @@ fn compile_expr(
                     loop_seq,
                     curr_fun,
                     false,
-                    tail_call_overwritten,
+                    is_tail_call_available,
                     instrs,
                 );
                 compile_num_type_check(Val::Reg(Reg::RAX), instrs);
@@ -785,7 +785,7 @@ fn compile_expr(
                     loop_seq,
                     curr_fun,
                     false,
-                    tail_call_overwritten,
+                    is_tail_call_available,
                     instrs,
                 );
                 compile_num_type_check(Val::Reg(Reg::RAX), instrs);
@@ -807,7 +807,7 @@ fn compile_expr(
                     loop_seq,
                     curr_fun,
                     false,
-                    tail_call_overwritten,
+                    is_tail_call_available,
                     instrs,
                 );
                 instrs.push(Instr::IMov(
@@ -822,7 +822,7 @@ fn compile_expr(
                     loop_seq,
                     curr_fun,
                     false,
-                    tail_call_overwritten,
+                    is_tail_call_available,
                     instrs,
                 );
                 compile_same_type_check(
@@ -851,7 +851,7 @@ fn compile_expr(
                     loop_seq,
                     curr_fun,
                     false,
-                    tail_call_overwritten,
+                    is_tail_call_available,
                     instrs,
                 );
                 compile_num_type_check(Val::Reg(Reg::RAX), instrs);
@@ -867,7 +867,7 @@ fn compile_expr(
                     loop_seq,
                     curr_fun,
                     false,
-                    tail_call_overwritten,
+                    is_tail_call_available,
                     instrs,
                 );
                 compile_num_type_check(Val::Reg(Reg::RAX), instrs);
@@ -891,7 +891,7 @@ fn compile_expr(
                     loop_seq,
                     curr_fun,
                     false,
-                    tail_call_overwritten,
+                    is_tail_call_available,
                     instrs,
                 );
                 compile_num_type_check(Val::Reg(Reg::RAX), instrs);
@@ -907,7 +907,7 @@ fn compile_expr(
                     loop_seq,
                     curr_fun,
                     false,
-                    tail_call_overwritten,
+                    is_tail_call_available,
                     instrs,
                 );
                 compile_num_type_check(Val::Reg(Reg::RAX), instrs);
@@ -934,7 +934,7 @@ fn compile_expr(
                     loop_seq,
                     curr_fun,
                     false,
-                    tail_call_overwritten,
+                    is_tail_call_available,
                     instrs,
                 );
                 compile_num_type_check(Val::Reg(Reg::RAX), instrs);
@@ -950,7 +950,7 @@ fn compile_expr(
                     loop_seq,
                     curr_fun,
                     false,
-                    tail_call_overwritten,
+                    is_tail_call_available,
                     instrs,
                 );
                 compile_num_type_check(Val::Reg(Reg::RAX), instrs);
@@ -974,7 +974,7 @@ fn compile_expr(
                     loop_seq,
                     curr_fun,
                     false,
-                    tail_call_overwritten,
+                    is_tail_call_available,
                     instrs,
                 );
                 compile_num_type_check(Val::Reg(Reg::RAX), instrs);
@@ -990,7 +990,7 @@ fn compile_expr(
                     loop_seq,
                     curr_fun,
                     false,
-                    tail_call_overwritten,
+                    is_tail_call_available,
                     instrs,
                 );
                 compile_num_type_check(Val::Reg(Reg::RAX), instrs);
@@ -1018,7 +1018,7 @@ fn compile_expr(
                 loop_seq,
                 curr_fun,
                 false,
-                tail_call_overwritten,
+                is_tail_call_available,
                 instrs,
             );
             instrs.push(Instr::CMP(Val::Reg(Reg::RAX), Val::Imm(FALSE_LIT)));
@@ -1032,7 +1032,7 @@ fn compile_expr(
                 loop_seq,
                 curr_fun,
                 is_tail_call,
-                tail_call_overwritten,
+                is_tail_call_available,
                 instrs,
             );
             let label_end = format!("label_end_{}", my_label_seq);
@@ -1046,7 +1046,7 @@ fn compile_expr(
                 loop_seq,
                 curr_fun,
                 is_tail_call,
-                tail_call_overwritten,
+                is_tail_call_available,
                 instrs,
             );
             instrs.push(Instr::LABEL(label_end.clone()));
@@ -1064,7 +1064,7 @@ fn compile_expr(
                 my_label_seq,
                 curr_fun,
                 false,
-                tail_call_overwritten,
+                is_tail_call_available,
                 instrs,
             );
             instrs.push(Instr::JMP(Val::Label(label_loop.clone())));
@@ -1082,7 +1082,7 @@ fn compile_expr(
                 loop_seq,
                 curr_fun,
                 false,
-                tail_call_overwritten,
+                is_tail_call_available,
                 instrs,
             );
             instrs.push(Instr::JMP(Val::Label(format!("label_end_{}", loop_seq))));
@@ -1092,7 +1092,7 @@ fn compile_expr(
                 panic!("Unbound variable identifier {}", x);
             }
             if x == curr_fun {
-                *tail_call_overwritten = true;
+                *is_tail_call_available = false;
             }
             compile_expr(
                 e1,
@@ -1102,7 +1102,7 @@ fn compile_expr(
                 loop_seq,
                 curr_fun,
                 false,
-                tail_call_overwritten,
+                is_tail_call_available,
                 instrs,
             );
             let x_ptr = env.get(x).unwrap();
@@ -1121,7 +1121,7 @@ fn compile_expr(
                     loop_seq,
                     curr_fun,
                     is_tail_call && i == (es.len() - 1),
-                    tail_call_overwritten,
+                    is_tail_call_available,
                     instrs,
                 );
             }
@@ -1141,7 +1141,7 @@ fn compile_expr(
                     loop_seq,
                     curr_fun,
                     false,
-                    tail_call_overwritten,
+                    is_tail_call_available,
                     instrs,
                 );
                 instrs.push(Instr::IMov(
@@ -1150,7 +1150,7 @@ fn compile_expr(
                 ));
             }
 
-            if is_tail_call && fun == curr_fun && !*tail_call_overwritten {
+            if fun == curr_fun && is_tail_call && *is_tail_call_available {
                 for i in 0..es.len() {
                     instrs.push(Instr::IMov(
                         Val::Reg(Reg::RAX),
@@ -1161,11 +1161,7 @@ fn compile_expr(
                         Val::Reg(Reg::RAX),
                     ));
                 }
-                let fun_body_ptr = env.get(fun).unwrap();
-                instrs.push(Instr::IMov(
-                    Val::Reg(Reg::RAX),
-                    Val::RegOffset(Reg::RBP, *fun_body_ptr),
-                ));
+                instrs.push(Instr::IMov(Val::Reg(Reg::RAX), Val::RegOffset(Reg::RBP, 1)));
                 instrs.push(Instr::JMP(Val::Reg(Reg::RAX)));
             } else {
                 for i in (0..es.len()).rev() {
@@ -1201,7 +1197,7 @@ fn compile_expr(
                     loop_seq,
                     curr_fun,
                     false,
-                    tail_call_overwritten,
+                    is_tail_call_available,
                     instrs,
                 );
                 instrs.push(Instr::IMov(
@@ -1239,7 +1235,7 @@ fn compile_expr(
                 loop_seq,
                 curr_fun,
                 false,
-                tail_call_overwritten,
+                is_tail_call_available,
                 instrs,
             );
             compile_ptr_type_check(Val::Reg(Reg::RAX), instrs);
@@ -1257,7 +1253,7 @@ fn compile_expr(
                 loop_seq,
                 curr_fun,
                 false,
-                tail_call_overwritten,
+                is_tail_call_available,
                 instrs,
             );
             compile_num_type_check(Val::Reg(Reg::RAX), instrs);
@@ -1284,7 +1280,7 @@ fn compile_expr(
                 loop_seq,
                 curr_fun,
                 false,
-                tail_call_overwritten,
+                is_tail_call_available,
                 instrs,
             );
             compile_ptr_type_check(Val::Reg(Reg::RAX), instrs);
@@ -1302,7 +1298,7 @@ fn compile_expr(
                 loop_seq,
                 curr_fun,
                 false,
-                tail_call_overwritten,
+                is_tail_call_available,
                 instrs,
             );
             compile_num_type_check(Val::Reg(Reg::RAX), instrs);
@@ -1330,7 +1326,7 @@ fn compile_expr(
                 loop_seq,
                 curr_fun,
                 false,
-                tail_call_overwritten,
+                is_tail_call_available,
                 instrs,
             );
             instrs.push(Instr::IMov(
@@ -1382,11 +1378,16 @@ fn compile_defn(d: &Defn, label_seq: &mut i32, instrs: &mut Vec<Instr>) {
         Val::Label(format!("fun_body_{}", fun)),
     ));
     instrs.push(Instr::IMov(Val::RegOffset(Reg::RBP, 1), Val::Reg(Reg::RAX)));
-    new_env = new_env.update(fun.clone(), 1);
+    instrs.push(Instr::IMov(
+        Val::Reg(Reg::RAX),
+        Val::Label(format!("fun_start_{}", fun)),
+    ));
+    instrs.push(Instr::IMov(Val::RegOffset(Reg::RBP, 2), Val::Reg(Reg::RAX)));
+    new_env = new_env.update(fun.clone(), 2);
 
     instrs.push(Instr::LABEL(format!("fun_body_{}", fun)));
     compile_expr(
-        e, &new_env, 2, label_seq, -1, &fun, true, &mut false, instrs,
+        e, &new_env, 2, label_seq, -1, &fun, true, &mut true, instrs,
     );
 
     instrs.push(Instr::LABEL(format!("fun_end_{}", fun)));
