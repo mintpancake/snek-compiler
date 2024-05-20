@@ -1091,9 +1091,6 @@ fn compile_expr(
             if !env.contains_key(x) {
                 panic!("Unbound variable identifier {}", x);
             }
-            if x == curr_fun {
-                *is_tail_call_available = false;
-            }
             compile_expr(
                 e1,
                 env,
@@ -1110,6 +1107,9 @@ fn compile_expr(
                 Val::RegOffset(Reg::RBP, *x_ptr),
                 Val::Reg(Reg::RAX),
             ));
+            if x == curr_fun {
+                *is_tail_call_available = false;
+            }
         }
         Expr::Block(es) => {
             for (i, e1) in es.iter().enumerate() {
@@ -1367,7 +1367,7 @@ fn compile_defn(d: &Defn, label_seq: &mut i32, instrs: &mut Vec<Instr>) {
     instrs.push(Instr::JMP(Val::Label(format!("fun_finish_{}", fun))));
 
     instrs.push(Instr::LABEL(format!("fun_start_{}", fun)));
-    compile_entry(instrs, 1 + estimate_stack_size(e));
+    compile_entry(instrs, 2 + estimate_stack_size(e));
 
     let mut new_env = ImHashMap::<String, i32>::new();
     for (i, p) in params.iter().enumerate() {
@@ -1387,7 +1387,7 @@ fn compile_defn(d: &Defn, label_seq: &mut i32, instrs: &mut Vec<Instr>) {
 
     instrs.push(Instr::LABEL(format!("fun_body_{}", fun)));
     compile_expr(
-        e, &new_env, 2, label_seq, -1, &fun, true, &mut true, instrs,
+        e, &new_env, 3, label_seq, -1, &fun, true, &mut true, instrs,
     );
 
     instrs.push(Instr::LABEL(format!("fun_end_{}", fun)));

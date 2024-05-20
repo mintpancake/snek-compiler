@@ -8,7 +8,7 @@
             "type": "lldb",
             "request": "launch",
             "name": "Debug",
-            "program": "${workspaceFolder}/tests/angela.run",
+            "program": "${workspaceFolder}/tests/test.run",
             "args": [
                 "3"
             ],
