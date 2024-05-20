@@ -13,8 +13,10 @@ const TRUE: &str = "true";
 const FALSE: &str = "false";
 const INPUT: &str = "input";
 const LET: &str = "let";
+const LET_AST: &str = "let*";
 const ADD1: &str = "add1";
 const SUB1: &str = "sub1";
+const NEG: &str = "negate";
 const ISNUM: &str = "isnum";
 const ISBOOL: &str = "isbool";
 const PRINT: &str = "print";
@@ -31,7 +33,8 @@ const LOOP: &str = "loop";
 const BREAK: &str = "break";
 const SET: &str = "set!";
 const BLOCK: &str = "block";
-const FUN: &str = "fun";
+const DEFN: &str = "defn";
+const FN: &str = "fn";
 const VEC: &str = "vec";
 const VEC_GET: &str = "vec-get";
 const VEC_SET: &str = "vec-set";
@@ -88,6 +91,7 @@ enum Instr {
     SAR(Val, Val),
     SAL(Val, Val),
     CMP(Val, Val),
+    NEG(Val),
     LABEL(String),
     JMP(String),
     JE(String),
@@ -109,6 +113,7 @@ enum Instr {
 enum Op1 {
     Add1,
     Sub1,
+    Neg,
     IsNum,
     IsBool,
     Print,
@@ -127,6 +132,13 @@ enum Op2 {
 }
 
 #[derive(Debug)]
+struct Defn {
+    pub name: Option<String>,
+    pub params: Vec<String>,
+    pub body: Box<Expr>,
+}
+
+#[derive(Debug)]
 enum Expr {
     NIL,
     Input,
@@ -141,6 +153,7 @@ enum Expr {
     Break(Box<Expr>),
     Set(String, Box<Expr>),
     Block(Vec<Expr>),
+    Fun(Defn),
     Call(String, Vec<Expr>),
     Vec(Vec<Expr>),
     VecGet(Box<Expr>, Box<Expr>),
@@ -148,13 +161,8 @@ enum Expr {
 }
 
 #[derive(Debug)]
-enum Defn {
-    Fun(String, Vec<String>, Expr),
-}
-
-#[derive(Debug)]
 enum Prog {
-    Prog(Vec<Defn>, Expr),
+    Prog(Vec<Expr>, Expr),
 }
 
 fn valid_num(n: i64) -> bool {
@@ -172,8 +180,10 @@ fn valid_id(x: &str) -> bool {
         || x == FALSE
         || x == INPUT
         || x == LET
+        || x == LET_AST
         || x == ADD1
         || x == SUB1
+        || x == NEG
         || x == ISNUM
         || x == ISBOOL
         || x == PRINT
@@ -190,7 +200,8 @@ fn valid_id(x: &str) -> bool {
         || x == BREAK
         || x == SET
         || x == BLOCK
-        || x == FUN
+        || x == DEFN
+        || x == FN
         || x == VEC
         || x == VEC_GET
         || x == VEC_SET
@@ -229,10 +240,10 @@ fn parse_prog(s: &Sexp) -> Prog {
     }
 }
 
-fn parse_defn(d: &Sexp) -> Defn {
+fn parse_defn(d: &Sexp) -> Expr {
     match d {
         Sexp::List(ss) => match &ss[..] {
-            [Sexp::Atom(Atom::S(fun)), Sexp::List(names), s1] if fun == FUN => {
+            [Sexp::Atom(Atom::S(fun)), Sexp::List(names), s1] if fun == DEFN => {
                 let fun_name = match names.first() {
                     Some(Sexp::Atom(Atom::S(n))) if valid_id(n) => n.clone(),
                     _ => panic!("Invalid"),
@@ -245,8 +256,27 @@ fn parse_defn(d: &Sexp) -> Defn {
                         _ => panic!("Invalid"),
                     })
                     .collect();
-                let body = parse_expr(s1);
-                Defn::Fun(fun_name, params, body)
+                let body = Box::new(parse_expr(s1));
+                Expr::Fun(Defn {
+                    name: Some(fun_name),
+                    params,
+                    body,
+                })
+            }
+            [Sexp::Atom(Atom::S(fun)), Sexp::List(names), s1] if fun == FN => {
+                let params = names
+                    .iter()
+                    .map(|name| match name {
+                        Sexp::Atom(Atom::S(p)) if valid_id(p) => p.clone(),
+                        _ => panic!("Invalid"),
+                    })
+                    .collect();
+                let body = Box::new(parse_expr(s1));
+                Expr::Fun(Defn {
+                    name: None,
+                    params,
+                    body,
+                })
             }
             _ => panic!("Invalid"),
         },
@@ -262,7 +292,10 @@ fn parse_expr(s: &Sexp) -> Expr {
         Sexp::Atom(Atom::S(bool)) if valid_bool(bool) => Expr::Boolean(bool == TRUE),
         Sexp::Atom(Atom::S(x)) if valid_id(x) => Expr::Id(x.clone()),
         Sexp::List(ss) => match &ss[..] {
-            [Sexp::Atom(Atom::S(op)), bs, s1] if op == LET => {
+            [Sexp::Atom(Atom::S(op)), b, s1] if op == LET => {
+                Expr::Let(vec![parse_bind(b)], Box::new(parse_expr(s1)))
+            }
+            [Sexp::Atom(Atom::S(op)), bs, s1] if op == LET_AST => {
                 Expr::Let(parse_binds(bs), Box::new(parse_expr(s1)))
             }
             [Sexp::Atom(Atom::S(op)), s1] if op == ADD1 => {
@@ -270,6 +303,9 @@ fn parse_expr(s: &Sexp) -> Expr {
             }
             [Sexp::Atom(Atom::S(op)), s1] if op == SUB1 => {
                 Expr::UnOp(Op1::Sub1, Box::new(parse_expr(s1)))
+            }
+            [Sexp::Atom(Atom::S(op)), s1] if op == NEG => {
+                Expr::UnOp(Op1::Neg, Box::new(parse_expr(s1)))
             }
             [Sexp::Atom(Atom::S(op)), s1] if op == ISNUM => {
                 Expr::UnOp(Op1::IsNum, Box::new(parse_expr(s1)))
@@ -331,6 +367,7 @@ fn parse_expr(s: &Sexp) -> Expr {
                 Expr::Set(x.clone(), Box::new(parse_expr(s2)))
             }
             [Sexp::Atom(Atom::S(op)), ss @ ..] if op == BLOCK => Expr::Block(parse_blocks(ss)),
+            [Sexp::Atom(Atom::S(op)), _, _] if op == DEFN || op == FN => parse_defn(s),
             [Sexp::Atom(Atom::S(op)), ss @ ..] if op == VEC => Expr::Vec(parse_vec(ss)),
             [Sexp::Atom(Atom::S(op)), s1, s2] if op == VEC_GET => {
                 Expr::VecGet(Box::new(parse_expr(s1)), Box::new(parse_expr(s2)))
@@ -473,7 +510,6 @@ fn compile_expr(
     loop_seq: i32,
     funs: &HashMap<String, i32>,
     curr_fun: &str,
-    param_space_size: i32,
     is_tail_call: bool,
     instrs: &mut Vec<Instr>,
 ) {
@@ -512,16 +548,7 @@ fn compile_expr(
                     panic!("Duplicate binding");
                 }
                 compile_expr(
-                    e,
-                    &new_env,
-                    new_st_ptr,
-                    label_seq,
-                    loop_seq,
-                    funs,
-                    curr_fun,
-                    param_space_size,
-                    false,
-                    instrs,
+                    e, &new_env, new_st_ptr, label_seq, loop_seq, funs, curr_fun, false, instrs,
                 );
                 instrs.push(Instr::IMov(
                     Val::RegOffset(Reg::RBP, new_st_ptr),
@@ -539,7 +566,6 @@ fn compile_expr(
                 loop_seq,
                 funs,
                 curr_fun,
-                param_space_size,
                 is_tail_call,
                 instrs,
             );
@@ -547,16 +573,7 @@ fn compile_expr(
         Expr::UnOp(op, e1) => match op {
             Op1::Add1 => {
                 compile_expr(
-                    e1,
-                    env,
-                    st_ptr,
-                    label_seq,
-                    loop_seq,
-                    funs,
-                    curr_fun,
-                    param_space_size,
-                    false,
-                    instrs,
+                    e1, env, st_ptr, label_seq, loop_seq, funs, curr_fun, false, instrs,
                 );
                 compile_num_type_check(Val::Reg(Reg::RAX), instrs);
                 instrs.push(Instr::IAdd(Val::Reg(Reg::RAX), Val::Imm(to_num_literal(1))));
@@ -564,35 +581,25 @@ fn compile_expr(
             }
             Op1::Sub1 => {
                 compile_expr(
-                    e1,
-                    env,
-                    st_ptr,
-                    label_seq,
-                    loop_seq,
-                    funs,
-                    curr_fun,
-                    param_space_size,
-                    false,
-                    instrs,
+                    e1, env, st_ptr, label_seq, loop_seq, funs, curr_fun, false, instrs,
                 );
                 compile_num_type_check(Val::Reg(Reg::RAX), instrs);
                 instrs.push(Instr::ISub(Val::Reg(Reg::RAX), Val::Imm(to_num_literal(1))));
+                compile_overflow_check(instrs);
+            }
+            Op1::Neg => {
+                compile_expr(
+                    e1, env, st_ptr, label_seq, loop_seq, funs, curr_fun, false, instrs,
+                );
+                compile_num_type_check(Val::Reg(Reg::RAX), instrs);
+                instrs.push(Instr::NEG(Val::Reg(Reg::RAX)));
                 compile_overflow_check(instrs);
             }
             Op1::IsNum => {
                 let my_label_seq = *label_seq;
                 *label_seq += 1;
                 compile_expr(
-                    e1,
-                    env,
-                    st_ptr,
-                    label_seq,
-                    loop_seq,
-                    funs,
-                    curr_fun,
-                    param_space_size,
-                    false,
-                    instrs,
+                    e1, env, st_ptr, label_seq, loop_seq, funs, curr_fun, false, instrs,
                 );
                 instrs.push(Instr::AND(Val::Reg(Reg::RAX), Val::Imm(TAG_MASK_1)));
                 instrs.push(Instr::CMP(Val::Reg(Reg::RAX), Val::Imm(NUM_TAG)));
@@ -605,16 +612,7 @@ fn compile_expr(
                 let my_label_seq = *label_seq;
                 *label_seq += 1;
                 compile_expr(
-                    e1,
-                    env,
-                    st_ptr,
-                    label_seq,
-                    loop_seq,
-                    funs,
-                    curr_fun,
-                    param_space_size,
-                    false,
-                    instrs,
+                    e1, env, st_ptr, label_seq, loop_seq, funs, curr_fun, false, instrs,
                 );
                 instrs.push(Instr::AND(Val::Reg(Reg::RAX), Val::Imm(TAG_MASK_2)));
                 instrs.push(Instr::CMP(Val::Reg(Reg::RAX), Val::Imm(BOOL_TAG)));
@@ -625,16 +623,7 @@ fn compile_expr(
             }
             Op1::Print => {
                 compile_expr(
-                    e1,
-                    env,
-                    st_ptr,
-                    label_seq,
-                    loop_seq,
-                    funs,
-                    curr_fun,
-                    param_space_size,
-                    false,
-                    instrs,
+                    e1, env, st_ptr, label_seq, loop_seq, funs, curr_fun, false, instrs,
                 );
                 instrs.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Reg(Reg::RAX)));
                 instrs.push(Instr::Call(FUN_SNEK_PRINT.to_string()));
@@ -643,16 +632,7 @@ fn compile_expr(
         Expr::BinOp(op, e1, e2) => match op {
             Op2::Plus => {
                 compile_expr(
-                    e2,
-                    env,
-                    st_ptr,
-                    label_seq,
-                    loop_seq,
-                    funs,
-                    curr_fun,
-                    param_space_size,
-                    false,
-                    instrs,
+                    e2, env, st_ptr, label_seq, loop_seq, funs, curr_fun, false, instrs,
                 );
                 compile_num_type_check(Val::Reg(Reg::RAX), instrs);
                 instrs.push(Instr::IMov(
@@ -667,7 +647,6 @@ fn compile_expr(
                     loop_seq,
                     funs,
                     curr_fun,
-                    param_space_size,
                     false,
                     instrs,
                 );
@@ -680,16 +659,7 @@ fn compile_expr(
             }
             Op2::Minus => {
                 compile_expr(
-                    e2,
-                    env,
-                    st_ptr,
-                    label_seq,
-                    loop_seq,
-                    funs,
-                    curr_fun,
-                    param_space_size,
-                    false,
-                    instrs,
+                    e2, env, st_ptr, label_seq, loop_seq, funs, curr_fun, false, instrs,
                 );
                 compile_num_type_check(Val::Reg(Reg::RAX), instrs);
                 instrs.push(Instr::IMov(
@@ -704,7 +674,6 @@ fn compile_expr(
                     loop_seq,
                     funs,
                     curr_fun,
-                    param_space_size,
                     false,
                     instrs,
                 );
@@ -717,16 +686,7 @@ fn compile_expr(
             }
             Op2::Times => {
                 compile_expr(
-                    e2,
-                    env,
-                    st_ptr,
-                    label_seq,
-                    loop_seq,
-                    funs,
-                    curr_fun,
-                    param_space_size,
-                    false,
-                    instrs,
+                    e2, env, st_ptr, label_seq, loop_seq, funs, curr_fun, false, instrs,
                 );
                 compile_num_type_check(Val::Reg(Reg::RAX), instrs);
                 instrs.push(Instr::IMov(
@@ -741,7 +701,6 @@ fn compile_expr(
                     loop_seq,
                     funs,
                     curr_fun,
-                    param_space_size,
                     false,
                     instrs,
                 );
@@ -757,16 +716,7 @@ fn compile_expr(
                 let my_label_seq = *label_seq;
                 *label_seq += 1;
                 compile_expr(
-                    e1,
-                    env,
-                    st_ptr,
-                    label_seq,
-                    loop_seq,
-                    funs,
-                    curr_fun,
-                    param_space_size,
-                    false,
-                    instrs,
+                    e1, env, st_ptr, label_seq, loop_seq, funs, curr_fun, false, instrs,
                 );
                 instrs.push(Instr::IMov(
                     Val::RegOffset(Reg::RBP, st_ptr),
@@ -780,7 +730,6 @@ fn compile_expr(
                     loop_seq,
                     funs,
                     curr_fun,
-                    param_space_size,
                     false,
                     instrs,
                 );
@@ -803,16 +752,7 @@ fn compile_expr(
                 let my_label_seq = *label_seq;
                 *label_seq += 1;
                 compile_expr(
-                    e1,
-                    env,
-                    st_ptr,
-                    label_seq,
-                    loop_seq,
-                    funs,
-                    curr_fun,
-                    param_space_size,
-                    false,
-                    instrs,
+                    e1, env, st_ptr, label_seq, loop_seq, funs, curr_fun, false, instrs,
                 );
                 compile_num_type_check(Val::Reg(Reg::RAX), instrs);
                 instrs.push(Instr::IMov(
@@ -827,7 +767,6 @@ fn compile_expr(
                     loop_seq,
                     funs,
                     curr_fun,
-                    param_space_size,
                     false,
                     instrs,
                 );
@@ -845,16 +784,7 @@ fn compile_expr(
                 let my_label_seq = *label_seq;
                 *label_seq += 1;
                 compile_expr(
-                    e1,
-                    env,
-                    st_ptr,
-                    label_seq,
-                    loop_seq,
-                    funs,
-                    curr_fun,
-                    param_space_size,
-                    false,
-                    instrs,
+                    e1, env, st_ptr, label_seq, loop_seq, funs, curr_fun, false, instrs,
                 );
                 compile_num_type_check(Val::Reg(Reg::RAX), instrs);
                 instrs.push(Instr::IMov(
@@ -869,7 +799,6 @@ fn compile_expr(
                     loop_seq,
                     funs,
                     curr_fun,
-                    param_space_size,
                     false,
                     instrs,
                 );
@@ -887,16 +816,7 @@ fn compile_expr(
                 let my_label_seq = *label_seq;
                 *label_seq += 1;
                 compile_expr(
-                    e1,
-                    env,
-                    st_ptr,
-                    label_seq,
-                    loop_seq,
-                    funs,
-                    curr_fun,
-                    param_space_size,
-                    false,
-                    instrs,
+                    e1, env, st_ptr, label_seq, loop_seq, funs, curr_fun, false, instrs,
                 );
                 compile_num_type_check(Val::Reg(Reg::RAX), instrs);
                 instrs.push(Instr::IMov(
@@ -911,7 +831,6 @@ fn compile_expr(
                     loop_seq,
                     funs,
                     curr_fun,
-                    param_space_size,
                     false,
                     instrs,
                 );
@@ -929,16 +848,7 @@ fn compile_expr(
                 let my_label_seq = *label_seq;
                 *label_seq += 1;
                 compile_expr(
-                    e1,
-                    env,
-                    st_ptr,
-                    label_seq,
-                    loop_seq,
-                    funs,
-                    curr_fun,
-                    param_space_size,
-                    false,
-                    instrs,
+                    e1, env, st_ptr, label_seq, loop_seq, funs, curr_fun, false, instrs,
                 );
                 compile_num_type_check(Val::Reg(Reg::RAX), instrs);
                 instrs.push(Instr::IMov(
@@ -953,7 +863,6 @@ fn compile_expr(
                     loop_seq,
                     funs,
                     curr_fun,
-                    param_space_size,
                     false,
                     instrs,
                 );
@@ -972,16 +881,7 @@ fn compile_expr(
             let my_label_seq = *label_seq;
             *label_seq += 1;
             compile_expr(
-                e_cond,
-                env,
-                st_ptr,
-                label_seq,
-                loop_seq,
-                funs,
-                curr_fun,
-                param_space_size,
-                false,
-                instrs,
+                e_cond, env, st_ptr, label_seq, loop_seq, funs, curr_fun, false, instrs,
             );
             instrs.push(Instr::CMP(Val::Reg(Reg::RAX), Val::Imm(FALSE_LIT)));
             let label_else = format!("label_else_{}", my_label_seq);
@@ -994,7 +894,6 @@ fn compile_expr(
                 loop_seq,
                 funs,
                 curr_fun,
-                param_space_size,
                 is_tail_call,
                 instrs,
             );
@@ -1009,7 +908,6 @@ fn compile_expr(
                 loop_seq,
                 funs,
                 curr_fun,
-                param_space_size,
                 is_tail_call,
                 instrs,
             );
@@ -1028,7 +926,6 @@ fn compile_expr(
                 my_label_seq,
                 funs,
                 curr_fun,
-                param_space_size,
                 false,
                 instrs,
             );
@@ -1040,16 +937,7 @@ fn compile_expr(
                 panic!("Cannot break outside of loop");
             }
             compile_expr(
-                e1,
-                env,
-                st_ptr,
-                label_seq,
-                loop_seq,
-                funs,
-                curr_fun,
-                param_space_size,
-                false,
-                instrs,
+                e1, env, st_ptr, label_seq, loop_seq, funs, curr_fun, false, instrs,
             );
             instrs.push(Instr::JMP(format!("label_end_{}", loop_seq)));
         }
@@ -1058,16 +946,7 @@ fn compile_expr(
                 panic!("Unbound variable identifier {}", x);
             }
             compile_expr(
-                e1,
-                env,
-                st_ptr,
-                label_seq,
-                loop_seq,
-                funs,
-                curr_fun,
-                param_space_size,
-                false,
-                instrs,
+                e1, env, st_ptr, label_seq, loop_seq, funs, curr_fun, false, instrs,
             );
             let x_ptr = env.get(x).unwrap();
             instrs.push(Instr::IMov(
@@ -1085,7 +964,6 @@ fn compile_expr(
                     loop_seq,
                     funs,
                     curr_fun,
-                    param_space_size,
                     is_tail_call && i == (es.len() - 1),
                     instrs,
                 );
@@ -1103,16 +981,7 @@ fn compile_expr(
             for (i, e1) in es.iter().enumerate() {
                 let new_st_ptr = st_ptr + (i as i32);
                 compile_expr(
-                    e1,
-                    env,
-                    new_st_ptr,
-                    label_seq,
-                    loop_seq,
-                    funs,
-                    curr_fun,
-                    param_space_size,
-                    false,
-                    instrs,
+                    e1, env, new_st_ptr, label_seq, loop_seq, funs, curr_fun, false, instrs,
                 );
                 instrs.push(Instr::IMov(
                     Val::RegOffset(Reg::RBP, new_st_ptr),
@@ -1147,20 +1016,12 @@ fn compile_expr(
                 ));
             }
         }
+        Expr::Fun(defn) => todo!(),
         Expr::Vec(es) => {
             for (i, e1) in es.iter().enumerate() {
                 let new_st_ptr = st_ptr + (i as i32);
                 compile_expr(
-                    e1,
-                    env,
-                    new_st_ptr,
-                    label_seq,
-                    loop_seq,
-                    funs,
-                    curr_fun,
-                    param_space_size,
-                    false,
-                    instrs,
+                    e1, env, new_st_ptr, label_seq, loop_seq, funs, curr_fun, false, instrs,
                 );
                 instrs.push(Instr::IMov(
                     Val::RegOffset(Reg::RBP, new_st_ptr),
@@ -1190,16 +1051,7 @@ fn compile_expr(
         }
         Expr::VecGet(e_vec, e_index) => {
             compile_expr(
-                e_vec,
-                env,
-                st_ptr,
-                label_seq,
-                loop_seq,
-                funs,
-                curr_fun,
-                param_space_size,
-                false,
-                instrs,
+                e_vec, env, st_ptr, label_seq, loop_seq, funs, curr_fun, false, instrs,
             );
             compile_ptr_type_check(Val::Reg(Reg::RAX), instrs);
             compile_nil_ptr_check(Val::Reg(Reg::RAX), instrs);
@@ -1216,7 +1068,6 @@ fn compile_expr(
                 loop_seq,
                 funs,
                 curr_fun,
-                param_space_size,
                 false,
                 instrs,
             );
@@ -1237,16 +1088,7 @@ fn compile_expr(
         }
         Expr::VecSet(e_vec, e_index, e_val) => {
             compile_expr(
-                e_vec,
-                env,
-                st_ptr,
-                label_seq,
-                loop_seq,
-                funs,
-                curr_fun,
-                param_space_size,
-                false,
-                instrs,
+                e_vec, env, st_ptr, label_seq, loop_seq, funs, curr_fun, false, instrs,
             );
             compile_ptr_type_check(Val::Reg(Reg::RAX), instrs);
             compile_nil_ptr_check(Val::Reg(Reg::RAX), instrs);
@@ -1263,7 +1105,6 @@ fn compile_expr(
                 loop_seq,
                 funs,
                 curr_fun,
-                param_space_size,
                 false,
                 instrs,
             );
@@ -1292,7 +1133,6 @@ fn compile_expr(
                 loop_seq,
                 funs,
                 curr_fun,
-                param_space_size,
                 false,
                 instrs,
             );
@@ -1306,7 +1146,7 @@ fn compile_expr(
 }
 
 fn compile_defn(
-    d: &Defn,
+    d: &Expr,
     env: &ImHashMap<String, i32>,
     st_ptr: i32,
     label_seq: &mut i32,
@@ -1315,30 +1155,32 @@ fn compile_defn(
     instrs: &mut Vec<Instr>,
 ) {
     match d {
-        Defn::Fun(fun, params, e) => {
-            let mut new_env = env.clone();
-            for (i, p) in params.iter().enumerate() {
-                new_env = new_env.update(p.clone(), -(i as i32 + 2));
-            }
+        Expr::Fun(defn) => {
+            let Defn {
+                name,
+                params,
+                body: e,
+            } = defn;
+            match name {
+                Some(fun) => {
+                    let mut new_env = env.clone();
+                    for (i, p) in params.iter().enumerate() {
+                        new_env = new_env.update(p.clone(), -(i as i32 + 2));
+                    }
 
-            instrs.push(Instr::LABEL(format!("fun_start_{}", fun)));
-            compile_entry(instrs, estimate_stack_size(e));
-            instrs.push(Instr::LABEL(format!("fun_body_{}", fun)));
-            compile_expr(
-                e,
-                &new_env,
-                st_ptr,
-                label_seq,
-                loop_seq,
-                funs,
-                fun,
-                params.len() as i32,
-                true,
-                instrs,
-            );
-            instrs.push(Instr::LABEL(format!("fun_end_{}", fun)));
-            compile_exit(instrs);
+                    instrs.push(Instr::LABEL(format!("fun_start_{}", fun)));
+                    compile_entry(instrs, estimate_stack_size(e));
+                    instrs.push(Instr::LABEL(format!("fun_body_{}", fun)));
+                    compile_expr(
+                        e, &new_env, st_ptr, label_seq, loop_seq, funs, fun, true, instrs,
+                    );
+                    instrs.push(Instr::LABEL(format!("fun_end_{}", fun)));
+                    compile_exit(instrs);
+                }
+                None => todo!(),
+            }
         }
+        _ => panic!("Invalid"),
     }
 }
 
@@ -1370,22 +1212,33 @@ fn compile_out(instrs: &mut Vec<Instr>) {
     instrs.push(Instr::IMov(Val::Reg(Reg::R12), Val::RegOffset(Reg::RBP, 2)));
 }
 
-fn make_funs(defns: &Vec<Defn>, funs: &mut HashMap<String, i32>) {
+fn make_funs(defns: &Vec<Expr>, funs: &mut HashMap<String, i32>) {
     for d in defns {
         match d {
-            Defn::Fun(fun, params, _) => {
-                if funs.contains_key(fun) {
-                    panic!("Duplicate function {}", fun);
-                }
-                let mut param_set = HashSet::<String>::new();
-                for p in params {
-                    if param_set.contains(p) {
-                        panic!("Duplicate parameter {}", p);
+            Expr::Fun(defn) => {
+                let Defn {
+                    name,
+                    params,
+                    body: _,
+                } = defn;
+                match name {
+                    Some(fun) => {
+                        if funs.contains_key(fun) {
+                            panic!("Duplicate function {}", fun);
+                        }
+                        let mut param_set = HashSet::<String>::new();
+                        for p in params {
+                            if param_set.contains(p) {
+                                panic!("Duplicate parameter {}", p);
+                            }
+                            param_set.insert(p.clone());
+                        }
+                        funs.insert(fun.clone(), params.len() as i32);
                     }
-                    param_set.insert(p.clone());
+                    None => panic!("Invalid"),
                 }
-                funs.insert(fun.clone(), params.len() as i32);
             }
+            _ => panic!("Invalid"),
         }
     }
 }
@@ -1425,7 +1278,6 @@ fn compile(prog: &Prog) -> String {
         -1,
         &funs,
         "",
-        0,
         false,
         &mut instrs,
     );
@@ -1475,6 +1327,7 @@ fn estimate_stack_size(e: &Expr) -> i32 {
             }
             max_size
         }
+        Expr::Fun(defn) => todo!(),
         Expr::VecSet(e_vec, e_index, e_val) => {
             1 + estimate_stack_size(e_vec)
                 .max(estimate_stack_size(e_index))
@@ -1492,6 +1345,7 @@ fn instr_to_str(i: &Instr) -> String {
         Instr::SAR(v1, v2) => format!("  sar {}, {}", val_to_str(v1), val_to_str(v2)),
         Instr::SAL(v1, v2) => format!("  sal {}, {}", val_to_str(v1), val_to_str(v2)),
         Instr::CMP(v1, v2) => format!("  cmp {}, {}", val_to_str(v1), val_to_str(v2)),
+        Instr::NEG(v) => format!("  neg {}", val_to_str(v)),
         Instr::LABEL(l) => format!("{}:", l),
         Instr::JMP(l) => format!("  jmp {}", l),
         Instr::JE(l) => format!("  je {}", l),
