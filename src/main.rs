@@ -1343,8 +1343,11 @@ fn find_free_vars(e: &Expr) -> HashSet<String> {
             s.extend(s1.difference(&xs).cloned());
             s
         }
-        Expr::UnOp(_, e1) | Expr::Loop(e1) | Expr::Break(e1) | Expr::Set(_, e1) => {
-            find_free_vars(e1)
+        Expr::UnOp(_, e1) | Expr::Loop(e1) | Expr::Break(e1) => find_free_vars(e1),
+        Expr::Set(x, e1) => {
+            let mut s = find_free_vars(e1);
+            s.insert(x.clone());
+            s
         }
         Expr::BinOp(_, e1, e2) | Expr::VecGet(e1, e2) => {
             let mut s = find_free_vars(e1);
