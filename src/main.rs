@@ -507,73 +507,6 @@ fn compile_out_of_bound_check(v: Val, ptr: Val, instrs: &mut Vec<Instr>) {
     instrs.push(Instr::JGE(Val::Label(LABEL_ERROR.to_string())));
 }
 
-fn compile_same_type_check(v1: Val, v2: Val, label_seq: &mut i32, instrs: &mut Vec<Instr>) {
-    let my_label_seq = *label_seq;
-    *label_seq += 1;
-    instrs.push(Instr::LABEL(format!("label_check_num_{}", my_label_seq)));
-    instrs.push(Instr::IMov(Val::Reg(Reg::RCX), v1.clone()));
-    instrs.push(Instr::AND(Val::Reg(Reg::RCX), Val::Imm(TAG_MASK_1)));
-    instrs.push(Instr::CMP(Val::Reg(Reg::RCX), Val::Imm(NUM_TAG)));
-    instrs.push(Instr::JNE(Val::Label(format!(
-        "label_check_bool_{}",
-        my_label_seq
-    ))));
-    instrs.push(Instr::IMov(Val::Reg(Reg::RDX), v2.clone()));
-    instrs.push(Instr::AND(Val::Reg(Reg::RDX), Val::Imm(TAG_MASK_1)));
-    instrs.push(Instr::CMP(Val::Reg(Reg::RDX), Val::Imm(NUM_TAG)));
-    instrs.push(Instr::JE(Val::Label(format!(
-        "label_check_end_{}",
-        my_label_seq
-    ))));
-    instrs.push(Instr::JNE(Val::Label(format!(
-        "label_check_error_{}",
-        my_label_seq
-    ))));
-
-    instrs.push(Instr::LABEL(format!("label_check_bool_{}", my_label_seq)));
-    instrs.push(Instr::IMov(Val::Reg(Reg::RCX), v1.clone()));
-    instrs.push(Instr::AND(Val::Reg(Reg::RCX), Val::Imm(TAG_MASK_2)));
-    instrs.push(Instr::CMP(Val::Reg(Reg::RCX), Val::Imm(BOOL_TAG)));
-    instrs.push(Instr::JNE(Val::Label(format!(
-        "label_check_ptr_cls_{}",
-        my_label_seq
-    ))));
-    instrs.push(Instr::IMov(Val::Reg(Reg::RDX), v2.clone()));
-    instrs.push(Instr::AND(Val::Reg(Reg::RDX), Val::Imm(TAG_MASK_2)));
-    instrs.push(Instr::CMP(Val::Reg(Reg::RDX), Val::Imm(BOOL_TAG)));
-    instrs.push(Instr::JE(Val::Label(format!(
-        "label_check_end_{}",
-        my_label_seq
-    ))));
-    instrs.push(Instr::JNE(Val::Label(format!(
-        "label_check_error_{}",
-        my_label_seq
-    ))));
-
-    instrs.push(Instr::LABEL(format!(
-        "label_check_ptr_cls_{}",
-        my_label_seq
-    )));
-    instrs.push(Instr::IMov(Val::Reg(Reg::RCX), v1.clone()));
-    instrs.push(Instr::AND(Val::Reg(Reg::RCX), Val::Imm(TAG_MASK_3)));
-    instrs.push(Instr::IMov(Val::Reg(Reg::RDX), v2.clone()));
-    instrs.push(Instr::AND(Val::Reg(Reg::RDX), Val::Imm(TAG_MASK_3)));
-    instrs.push(Instr::CMP(Val::Reg(Reg::RCX), Val::Reg(Reg::RDX)));
-    instrs.push(Instr::JE(Val::Label(format!(
-        "label_check_end_{}",
-        my_label_seq
-    ))));
-
-    instrs.push(Instr::LABEL(format!("label_check_error_{}", my_label_seq)));
-    instrs.push(Instr::IMov(
-        Val::Reg(Reg::RDI),
-        Val::Imm(TYPE_MISMATCH_ERROR),
-    ));
-    instrs.push(Instr::JMP(Val::Label(LABEL_ERROR.to_string())));
-
-    instrs.push(Instr::LABEL(format!("label_check_end_{}", my_label_seq)));
-}
-
 fn compile_overflow_check(instrs: &mut Vec<Instr>) {
     instrs.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Imm(OVERFLOW_ERROR)));
     instrs.push(Instr::JO(Val::Label(LABEL_ERROR.to_string())));
@@ -775,12 +708,6 @@ fn compile_expr(
                     loop_seq,
                     curr_fun,
                     funs,
-                    instrs,
-                );
-                compile_same_type_check(
-                    Val::RegOffset(Reg::RBP, st_ptr),
-                    Val::Reg(Reg::RAX),
-                    label_seq,
                     instrs,
                 );
                 instrs.push(Instr::CMP(
