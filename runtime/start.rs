@@ -3,6 +3,24 @@ use std::mem;
 
 static mut HEAP: [u64; 100000] = [0; 100000];
 
+const NIL_LIT: i64 = 1;
+const TRUE_LIT: i64 = 7;
+const FALSE_LIT: i64 = 3;
+
+const TAG_MASK_1: i64 = 1;
+const TAG_MASK_3: i64 = 7;
+
+const NUM_TAG: i64 = 0;
+const PTR_TAG: i64 = 1;
+const CLS_TAG: i64 = 5;
+
+const NOT_A_NUM_ERROR: i64 = 1;
+const TYPE_MISMATCH_ERROR: i64 = 2;
+const OVERFLOW_ERROR: i64 = 3;
+const OUT_OF_BOUNDS_ERROR: i64 = 4;
+const ARITY_MISMATCH_ERROR: i64 = 5;
+const NOT_A_FUNCTION_ERROR: i64 = 6;
+
 #[link(name = "our_code")]
 extern "C" {
     // The \x01 here is an undocumented feature of LLVM that ensures
@@ -15,13 +33,6 @@ extern "C" {
 #[no_mangle]
 #[export_name = "\x01snek_error"]
 pub fn snek_error(errcode: i64) {
-    const NOT_A_NUM_ERROR: i64 = 1;
-    const TYPE_MISMATCH_ERROR: i64 = 2;
-    const OVERFLOW_ERROR: i64 = 3;
-    const OUT_OF_BOUNDS_ERROR: i64 = 4;
-    const ARITY_MISMATCH_ERROR: i64 = 5;
-    const NOT_A_FUNCTION_ERROR: i64 = 6;
-
     if errcode == NOT_A_NUM_ERROR {
         eprintln!("invalid argument: not a number");
     } else if errcode == TYPE_MISMATCH_ERROR {
@@ -49,16 +60,16 @@ pub fn snek_print(val: i64) -> i64 {
 }
 
 fn print_inline(val: i64) {
-    if val == 1 {
+    if val == NIL_LIT {
         print!("nil");
-    } else if val == 3 {
+    } else if val == FALSE_LIT {
         print!("false");
-    } else if val == 7 {
+    } else if val == TRUE_LIT {
         print!("true");
-    } else if val & 1 == 0 {
+    } else if val & TAG_MASK_1 == NUM_TAG {
         print!("{}", val >> 1);
-    } else {
-        let ptr: *const i64 = unsafe { mem::transmute::<i64, *const i64>(val - 1) };
+    } else if val & TAG_MASK_3 == PTR_TAG {
+        let ptr: *const i64 = unsafe { mem::transmute::<i64, *const i64>(val - PTR_TAG) };
         let len = unsafe { *ptr } >> 1;
         print!("(vec ");
         for i in 0..len {
@@ -68,6 +79,12 @@ fn print_inline(val: i64) {
             }
         }
         print!(")");
+    } else if val & TAG_MASK_3 == CLS_TAG {
+        let ptr: *const i64 = unsafe { mem::transmute::<i64, *const i64>(val - CLS_TAG) };
+        let fun = unsafe { *ptr };
+        print!("fn:{}", fun);
+    } else {
+        print!("unknown");
     }
 }
 
