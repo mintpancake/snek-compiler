@@ -53,7 +53,7 @@ runtime_error_tests! {
         name: lam_not_fun,
         file: "lam_not_fun.snek",
         input: "0",
-        expected: "callee is not a function",
+        expected: "not a function",
     },
     {
         name: lam_arity,
