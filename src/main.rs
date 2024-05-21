@@ -946,12 +946,6 @@ fn compile_expr(
             instrs.push(Instr::IAdd(Val::Reg(Reg::RSP), Val::Imm(8 * (1 + len))));
         }
         Expr::Fun(d) => {
-            if let Some(fun) = &d.name {
-                if funs.contains(fun) {
-                    panic!("Duplicate function definition {}", fun);
-                }
-                funs.insert(fun.clone());
-            }
             compile_defn(env, d, label_seq, funs, instrs);
         }
         Expr::Vec(es) => {
@@ -1079,7 +1073,7 @@ fn compile_expr(
     }
 }
 
-fn check_defn(d: &Defn, label_seq: &mut i32) -> String {
+fn check_defn(d: &Defn, funs: &mut HashSet<String>, label_seq: &mut i32) -> String {
     let Defn {
         name,
         params,
@@ -1096,6 +1090,10 @@ fn check_defn(d: &Defn, label_seq: &mut i32) -> String {
     match name {
         Some(f) => {
             fun = f.clone();
+            if funs.contains(&fun) {
+                panic!("Duplicate function definition {}", fun);
+            }
+            funs.insert(fun.clone());
         }
         None => {
             fun = format!("$anon_{}", *label_seq);
@@ -1105,7 +1103,7 @@ fn check_defn(d: &Defn, label_seq: &mut i32) -> String {
     fun
 }
 
-fn init_defn_env(fun: String, params: &Vec<String>, xs: &Vec<String>) -> ImHashMap<String, i32> {
+fn init_env(fun: String, params: &Vec<String>, xs: &Vec<String>) -> ImHashMap<String, i32> {
     let mut env = ImHashMap::<String, i32>::new();
     for (i, p) in params.iter().enumerate() {
         env = env.update(p.clone(), -(3 + i as i32));
@@ -1185,10 +1183,10 @@ fn compile_defn(
         params,
         body: e,
     } = d;
-    let fun = check_defn(d, label_seq);
+    let fun = check_defn(d, funs, label_seq);
     let arity = params.len() as i64;
     let free_xs: Vec<String> = find_free_vars_defn(d).into_iter().collect();
-    let new_env = init_defn_env(fun.clone(), params, &free_xs);
+    let new_env = init_env(fun.clone(), params, &free_xs);
 
     instrs.push(Instr::JMP(Val::Label(format!("fun_finish_{}", fun))));
     instrs.push(Instr::LABEL(format!("fun_start_{}", fun)));
@@ -1239,7 +1237,7 @@ fn compile_out(instrs: &mut Vec<Instr>) {
     instrs.push(Instr::IMov(Val::Reg(Reg::R12), Val::RegOffset(Reg::RBP, 2)));
 }
 
-fn check_prog(prog: &Prog) -> (Vec<Defn>, Expr, HashSet<String>) {
+fn check_prog(prog: &Prog) -> (Vec<Defn>, Expr, i32) {
     let (defns, expr) = match prog {
         Prog::Prog(ds, e) => {
             let mut defns = Vec::new();
@@ -1259,58 +1257,40 @@ fn check_prog(prog: &Prog) -> (Vec<Defn>, Expr, HashSet<String>) {
                 panic!("Duplicate function definition {}", fun);
             }
             funs.insert(fun.clone());
+        } else {
+            panic!("Anonymous function definition not allowed");
         }
     }
-    (defns, expr, funs)
+    (defns, expr, funs.len() as i32)
 }
 
-fn init_env(defns: &Vec<Defn>) -> (ImHashMap<String, i32>, i32) {
-    let mut env = ImHashMap::<String, i32>::new();
-    let mut num_bound = 0;
-    for d in defns {
-        if let Some(fun) = &d.name {
-            env = env.update(fun.clone(), num_bound + 3);
-            num_bound += 1;
-        }
-    }
-    (env, num_bound)
-}
-
-fn compile_global_defns(
-    defns: &Vec<Defn>,
-    env: &ImHashMap<String, i32>,
-    label_seq: &mut i32,
-    funs: &mut HashSet<String>,
-    instrs: &mut Vec<Instr>,
-) {
-    for d in defns {
-        compile_defn(env, d, label_seq, funs, instrs);
-        if let Some(fun) = &d.name {
-            instrs.push(Instr::IMov(
-                Val::RegOffset(Reg::RBP, *env.get(fun).unwrap()),
-                Val::Reg(Reg::RAX),
-            ));
-        }
-    }
-}
-
-fn compile(prog: &Prog) -> String { // TODO: Do not support mutual calls
-    let (defns, expr, mut funs) = check_prog(prog);
+fn compile(prog: &Prog) -> String {
+    let (defns, expr, fun_len) = check_prog(prog);
     let mut instrs = Vec::new();
-    let (env, num_bound) = init_env(&defns);
+    let mut env = ImHashMap::new();
+    let mut funs = HashSet::new();
     let mut label_seq = 0;
 
     instrs.push(Instr::LABEL(LABEL_ERROR.to_string()));
     instrs.push(Instr::Call(Val::Label(FUN_SNEK_ERROR.to_string())));
     instrs.push(Instr::LABEL(OUR_CODE.to_string()));
 
-    compile_entry(&mut instrs, 2 + num_bound + estimate_stack_size(&expr));
+    compile_entry(&mut instrs, 2 + fun_len + estimate_stack_size(&expr));
     compile_in(&mut instrs);
-    compile_global_defns(&defns, &env, &mut label_seq, &mut funs, &mut instrs);
+    for (i, d) in defns.iter().enumerate() {
+        compile_defn(&env, &d, &mut label_seq, &mut funs, &mut instrs);
+        if let Some(fun) = &d.name {
+            instrs.push(Instr::IMov(
+                Val::RegOffset(Reg::RBP, 3 + i as i32),
+                Val::Reg(Reg::RAX),
+            ));
+            env = env.update(fun.clone(), 3 + i as i32);
+        }
+    }
     compile_expr(
         &expr,
         &env,
-        3 + num_bound,
+        3 + fun_len,
         &mut label_seq,
         -1,
         "",
