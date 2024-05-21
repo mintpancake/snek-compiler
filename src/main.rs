@@ -1079,13 +1079,6 @@ fn check_defn(d: &Defn, funs: &mut HashSet<String>, label_seq: &mut i32) -> Stri
         params,
         body: _,
     } = d;
-    let mut param_set = HashSet::<String>::new();
-    for p in params {
-        if param_set.contains(p) {
-            panic!("Duplicate parameter {}", p);
-        }
-        param_set.insert(p.clone());
-    }
     let fun;
     match name {
         Some(f) => {
@@ -1099,6 +1092,13 @@ fn check_defn(d: &Defn, funs: &mut HashSet<String>, label_seq: &mut i32) -> Stri
             fun = format!("$anon_{}", *label_seq);
             *label_seq += 1;
         }
+    }
+    let mut param_set = HashSet::<String>::new();
+    for p in params {
+        if param_set.contains(p) {
+            panic!("Duplicate parameter {}", p);
+        }
+        param_set.insert(p.clone());
     }
     fun
 }
