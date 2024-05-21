@@ -3,6 +3,9 @@ use std::mem;
 
 static mut HEAP: [u64; 100000] = [0; 100000];
 
+const MAX_NUM: i64 = 4611686018427387903;
+const MIN_NUM: i64 = -4611686018427387904;
+
 const NIL_LIT: i64 = 1;
 const TRUE_LIT: i64 = 7;
 const FALSE_LIT: i64 = 3;
@@ -89,25 +92,22 @@ fn print_inline(val: i64) {
 }
 
 fn parse_input(input: &str) -> i64 {
-    const MAX_NUM: i64 = 4611686018427387903;
-    const MIN_NUM: i64 = -4611686018427387904;
-
     if input == "false" {
-        3
+        FALSE_LIT
     } else if input == "true" {
-        7
+        TRUE_LIT
     } else {
         match input.parse::<i64>() {
             Ok(n) => {
                 if n > MAX_NUM || n < MIN_NUM {
                     eprintln!("overflow");
-                    std::process::exit(3);
+                    std::process::exit(OVERFLOW_ERROR as i32);
                 }
                 n << 1
             }
             Err(_) => {
                 eprintln!("invalid input");
-                std::process::exit(1);
+                std::process::exit(NOT_A_NUM_ERROR as i32);
             }
         }
     }
