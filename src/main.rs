@@ -518,17 +518,16 @@ fn compile_expr(
     st_ptr: i32,
     label_seq: &mut i32,
     loop_seq: i32,
-    curr_fun: &str,
-    funs: &mut HashSet<String>,
     instrs: &mut Vec<Instr>,
 ) {
     match e {
         Expr::NIL => instrs.push(Instr::IMov(Val::Reg(Reg::RAX), Val::Imm(NIL_LIT))),
         Expr::Input => {
-            if curr_fun != "" {
-                panic!("Input not allowed in function");
-            }
-            instrs.push(Instr::IMov(Val::Reg(Reg::RAX), Val::RegOffset(Reg::RBP, 1)))
+            let input_pos = *env.get(INPUT).unwrap();
+            instrs.push(Instr::IMov(
+                Val::Reg(Reg::RAX),
+                Val::RegOffset(Reg::RBP, input_pos),
+            ))
         }
         Expr::Number(n) => instrs.push(Instr::IMov(
             Val::Reg(Reg::RAX),
@@ -556,9 +555,7 @@ fn compile_expr(
                 if bound_ids.contains(x) {
                     panic!("Duplicate binding");
                 }
-                compile_expr(
-                    e, &new_env, new_st_ptr, label_seq, loop_seq, curr_fun, funs, instrs,
-                );
+                compile_expr(e, &new_env, new_st_ptr, label_seq, loop_seq, instrs);
                 instrs.push(Instr::IMov(
                     Val::RegOffset(Reg::RBP, new_st_ptr),
                     Val::Reg(Reg::RAX),
@@ -567,25 +564,23 @@ fn compile_expr(
                 new_env = new_env.update(x.clone(), new_st_ptr);
                 new_st_ptr += 1;
             }
-            compile_expr(
-                e1, &new_env, new_st_ptr, label_seq, loop_seq, curr_fun, funs, instrs,
-            );
+            compile_expr(e1, &new_env, new_st_ptr, label_seq, loop_seq, instrs);
         }
         Expr::UnOp(op, e1) => match op {
             Op1::Add1 => {
-                compile_expr(e1, env, st_ptr, label_seq, loop_seq, curr_fun, funs, instrs);
+                compile_expr(e1, env, st_ptr, label_seq, loop_seq, instrs);
                 compile_num_type_check(Val::Reg(Reg::RAX), instrs);
                 instrs.push(Instr::IAdd(Val::Reg(Reg::RAX), Val::Imm(to_num_literal(1))));
                 compile_overflow_check(instrs);
             }
             Op1::Sub1 => {
-                compile_expr(e1, env, st_ptr, label_seq, loop_seq, curr_fun, funs, instrs);
+                compile_expr(e1, env, st_ptr, label_seq, loop_seq, instrs);
                 compile_num_type_check(Val::Reg(Reg::RAX), instrs);
                 instrs.push(Instr::ISub(Val::Reg(Reg::RAX), Val::Imm(to_num_literal(1))));
                 compile_overflow_check(instrs);
             }
             Op1::Neg => {
-                compile_expr(e1, env, st_ptr, label_seq, loop_seq, curr_fun, funs, instrs);
+                compile_expr(e1, env, st_ptr, label_seq, loop_seq, instrs);
                 compile_num_type_check(Val::Reg(Reg::RAX), instrs);
                 instrs.push(Instr::NEG(Val::Reg(Reg::RAX)));
                 compile_overflow_check(instrs);
@@ -593,7 +588,7 @@ fn compile_expr(
             Op1::IsNum => {
                 let my_label_seq = *label_seq;
                 *label_seq += 1;
-                compile_expr(e1, env, st_ptr, label_seq, loop_seq, curr_fun, funs, instrs);
+                compile_expr(e1, env, st_ptr, label_seq, loop_seq, instrs);
                 instrs.push(Instr::AND(Val::Reg(Reg::RAX), Val::Imm(TAG_MASK_1)));
                 instrs.push(Instr::CMP(Val::Reg(Reg::RAX), Val::Imm(NUM_TAG)));
                 instrs.push(Instr::IMov(Val::Reg(Reg::RAX), Val::Imm(TRUE_LIT)));
@@ -604,7 +599,7 @@ fn compile_expr(
             Op1::IsBool => {
                 let my_label_seq = *label_seq;
                 *label_seq += 1;
-                compile_expr(e1, env, st_ptr, label_seq, loop_seq, curr_fun, funs, instrs);
+                compile_expr(e1, env, st_ptr, label_seq, loop_seq, instrs);
                 instrs.push(Instr::AND(Val::Reg(Reg::RAX), Val::Imm(TAG_MASK_2)));
                 instrs.push(Instr::CMP(Val::Reg(Reg::RAX), Val::Imm(BOOL_TAG)));
                 instrs.push(Instr::IMov(Val::Reg(Reg::RAX), Val::Imm(TRUE_LIT)));
@@ -613,29 +608,20 @@ fn compile_expr(
                 instrs.push(Instr::LABEL(format!("label_end_{}", my_label_seq)));
             }
             Op1::Print => {
-                compile_expr(e1, env, st_ptr, label_seq, loop_seq, curr_fun, funs, instrs);
+                compile_expr(e1, env, st_ptr, label_seq, loop_seq, instrs);
                 instrs.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Reg(Reg::RAX)));
                 instrs.push(Instr::Call(Val::Label(FUN_SNEK_PRINT.to_string())));
             }
         },
         Expr::BinOp(op, e1, e2) => match op {
             Op2::Plus => {
-                compile_expr(e2, env, st_ptr, label_seq, loop_seq, curr_fun, funs, instrs);
+                compile_expr(e2, env, st_ptr, label_seq, loop_seq, instrs);
                 compile_num_type_check(Val::Reg(Reg::RAX), instrs);
                 instrs.push(Instr::IMov(
                     Val::RegOffset(Reg::RBP, st_ptr),
                     Val::Reg(Reg::RAX),
                 ));
-                compile_expr(
-                    e1,
-                    env,
-                    st_ptr + 1,
-                    label_seq,
-                    loop_seq,
-                    curr_fun,
-                    funs,
-                    instrs,
-                );
+                compile_expr(e1, env, st_ptr + 1, label_seq, loop_seq, instrs);
                 compile_num_type_check(Val::Reg(Reg::RAX), instrs);
                 instrs.push(Instr::IAdd(
                     Val::Reg(Reg::RAX),
@@ -644,22 +630,13 @@ fn compile_expr(
                 compile_overflow_check(instrs);
             }
             Op2::Minus => {
-                compile_expr(e2, env, st_ptr, label_seq, loop_seq, curr_fun, funs, instrs);
+                compile_expr(e2, env, st_ptr, label_seq, loop_seq, instrs);
                 compile_num_type_check(Val::Reg(Reg::RAX), instrs);
                 instrs.push(Instr::IMov(
                     Val::RegOffset(Reg::RBP, st_ptr),
                     Val::Reg(Reg::RAX),
                 ));
-                compile_expr(
-                    e1,
-                    env,
-                    st_ptr + 1,
-                    label_seq,
-                    loop_seq,
-                    curr_fun,
-                    funs,
-                    instrs,
-                );
+                compile_expr(e1, env, st_ptr + 1, label_seq, loop_seq, instrs);
                 compile_num_type_check(Val::Reg(Reg::RAX), instrs);
                 instrs.push(Instr::ISub(
                     Val::Reg(Reg::RAX),
@@ -668,22 +645,13 @@ fn compile_expr(
                 compile_overflow_check(instrs);
             }
             Op2::Times => {
-                compile_expr(e2, env, st_ptr, label_seq, loop_seq, curr_fun, funs, instrs);
+                compile_expr(e2, env, st_ptr, label_seq, loop_seq, instrs);
                 compile_num_type_check(Val::Reg(Reg::RAX), instrs);
                 instrs.push(Instr::IMov(
                     Val::RegOffset(Reg::RBP, st_ptr),
                     Val::Reg(Reg::RAX),
                 ));
-                compile_expr(
-                    e1,
-                    env,
-                    st_ptr + 1,
-                    label_seq,
-                    loop_seq,
-                    curr_fun,
-                    funs,
-                    instrs,
-                );
+                compile_expr(e1, env, st_ptr + 1, label_seq, loop_seq, instrs);
                 compile_num_type_check(Val::Reg(Reg::RAX), instrs);
                 instrs.push(Instr::SAR(Val::Reg(Reg::RAX), Val::Imm(1)));
                 instrs.push(Instr::IMul(
@@ -695,21 +663,12 @@ fn compile_expr(
             Op2::Equal => {
                 let my_label_seq = *label_seq;
                 *label_seq += 1;
-                compile_expr(e1, env, st_ptr, label_seq, loop_seq, curr_fun, funs, instrs);
+                compile_expr(e1, env, st_ptr, label_seq, loop_seq, instrs);
                 instrs.push(Instr::IMov(
                     Val::RegOffset(Reg::RBP, st_ptr),
                     Val::Reg(Reg::RAX),
                 ));
-                compile_expr(
-                    e2,
-                    env,
-                    st_ptr + 1,
-                    label_seq,
-                    loop_seq,
-                    curr_fun,
-                    funs,
-                    instrs,
-                );
+                compile_expr(e2, env, st_ptr + 1, label_seq, loop_seq, instrs);
                 instrs.push(Instr::CMP(
                     Val::RegOffset(Reg::RBP, st_ptr),
                     Val::Reg(Reg::RAX),
@@ -722,22 +681,13 @@ fn compile_expr(
             Op2::Greater => {
                 let my_label_seq = *label_seq;
                 *label_seq += 1;
-                compile_expr(e1, env, st_ptr, label_seq, loop_seq, curr_fun, funs, instrs);
+                compile_expr(e1, env, st_ptr, label_seq, loop_seq, instrs);
                 compile_num_type_check(Val::Reg(Reg::RAX), instrs);
                 instrs.push(Instr::IMov(
                     Val::RegOffset(Reg::RBP, st_ptr),
                     Val::Reg(Reg::RAX),
                 ));
-                compile_expr(
-                    e2,
-                    env,
-                    st_ptr + 1,
-                    label_seq,
-                    loop_seq,
-                    curr_fun,
-                    funs,
-                    instrs,
-                );
+                compile_expr(e2, env, st_ptr + 1, label_seq, loop_seq, instrs);
                 compile_num_type_check(Val::Reg(Reg::RAX), instrs);
                 instrs.push(Instr::CMP(
                     Val::RegOffset(Reg::RBP, st_ptr),
@@ -751,22 +701,13 @@ fn compile_expr(
             Op2::GreaterEqual => {
                 let my_label_seq = *label_seq;
                 *label_seq += 1;
-                compile_expr(e1, env, st_ptr, label_seq, loop_seq, curr_fun, funs, instrs);
+                compile_expr(e1, env, st_ptr, label_seq, loop_seq, instrs);
                 compile_num_type_check(Val::Reg(Reg::RAX), instrs);
                 instrs.push(Instr::IMov(
                     Val::RegOffset(Reg::RBP, st_ptr),
                     Val::Reg(Reg::RAX),
                 ));
-                compile_expr(
-                    e2,
-                    env,
-                    st_ptr + 1,
-                    label_seq,
-                    loop_seq,
-                    curr_fun,
-                    funs,
-                    instrs,
-                );
+                compile_expr(e2, env, st_ptr + 1, label_seq, loop_seq, instrs);
                 compile_num_type_check(Val::Reg(Reg::RAX), instrs);
                 instrs.push(Instr::CMP(
                     Val::RegOffset(Reg::RBP, st_ptr),
@@ -783,22 +724,13 @@ fn compile_expr(
             Op2::Less => {
                 let my_label_seq = *label_seq;
                 *label_seq += 1;
-                compile_expr(e1, env, st_ptr, label_seq, loop_seq, curr_fun, funs, instrs);
+                compile_expr(e1, env, st_ptr, label_seq, loop_seq, instrs);
                 compile_num_type_check(Val::Reg(Reg::RAX), instrs);
                 instrs.push(Instr::IMov(
                     Val::RegOffset(Reg::RBP, st_ptr),
                     Val::Reg(Reg::RAX),
                 ));
-                compile_expr(
-                    e2,
-                    env,
-                    st_ptr + 1,
-                    label_seq,
-                    loop_seq,
-                    curr_fun,
-                    funs,
-                    instrs,
-                );
+                compile_expr(e2, env, st_ptr + 1, label_seq, loop_seq, instrs);
                 compile_num_type_check(Val::Reg(Reg::RAX), instrs);
                 instrs.push(Instr::CMP(
                     Val::RegOffset(Reg::RBP, st_ptr),
@@ -812,22 +744,13 @@ fn compile_expr(
             Op2::LessEqual => {
                 let my_label_seq = *label_seq;
                 *label_seq += 1;
-                compile_expr(e1, env, st_ptr, label_seq, loop_seq, curr_fun, funs, instrs);
+                compile_expr(e1, env, st_ptr, label_seq, loop_seq, instrs);
                 compile_num_type_check(Val::Reg(Reg::RAX), instrs);
                 instrs.push(Instr::IMov(
                     Val::RegOffset(Reg::RBP, st_ptr),
                     Val::Reg(Reg::RAX),
                 ));
-                compile_expr(
-                    e2,
-                    env,
-                    st_ptr + 1,
-                    label_seq,
-                    loop_seq,
-                    curr_fun,
-                    funs,
-                    instrs,
-                );
+                compile_expr(e2, env, st_ptr + 1, label_seq, loop_seq, instrs);
                 compile_num_type_check(Val::Reg(Reg::RAX), instrs);
                 instrs.push(Instr::CMP(
                     Val::RegOffset(Reg::RBP, st_ptr),
@@ -845,21 +768,15 @@ fn compile_expr(
         Expr::If(e_cond, e_then, e_else) => {
             let my_label_seq = *label_seq;
             *label_seq += 1;
-            compile_expr(
-                e_cond, env, st_ptr, label_seq, loop_seq, curr_fun, funs, instrs,
-            );
+            compile_expr(e_cond, env, st_ptr, label_seq, loop_seq, instrs);
             instrs.push(Instr::CMP(Val::Reg(Reg::RAX), Val::Imm(FALSE_LIT)));
             let label_else = format!("label_else_{}", my_label_seq);
             instrs.push(Instr::JE(Val::Label(label_else.clone())));
-            compile_expr(
-                e_then, env, st_ptr, label_seq, loop_seq, curr_fun, funs, instrs,
-            );
+            compile_expr(e_then, env, st_ptr, label_seq, loop_seq, instrs);
             let label_end = format!("label_end_{}", my_label_seq);
             instrs.push(Instr::JMP(Val::Label(label_end.clone())));
             instrs.push(Instr::LABEL(label_else.clone()));
-            compile_expr(
-                e_else, env, st_ptr, label_seq, loop_seq, curr_fun, funs, instrs,
-            );
+            compile_expr(e_else, env, st_ptr, label_seq, loop_seq, instrs);
             instrs.push(Instr::LABEL(label_end.clone()));
         }
         Expr::Loop(e1) => {
@@ -867,16 +784,7 @@ fn compile_expr(
             *label_seq += 1;
             let label_loop = format!("label_loop_{}", my_label_seq);
             instrs.push(Instr::LABEL(label_loop.clone()));
-            compile_expr(
-                e1,
-                env,
-                st_ptr,
-                label_seq,
-                my_label_seq,
-                curr_fun,
-                funs,
-                instrs,
-            );
+            compile_expr(e1, env, st_ptr, label_seq, my_label_seq, instrs);
             instrs.push(Instr::JMP(Val::Label(label_loop.clone())));
             instrs.push(Instr::LABEL(format!("label_end_{}", my_label_seq)));
         }
@@ -884,14 +792,14 @@ fn compile_expr(
             if loop_seq == -1 {
                 panic!("Cannot break outside of loop");
             }
-            compile_expr(e1, env, st_ptr, label_seq, loop_seq, curr_fun, funs, instrs);
+            compile_expr(e1, env, st_ptr, label_seq, loop_seq, instrs);
             instrs.push(Instr::JMP(Val::Label(format!("label_end_{}", loop_seq))));
         }
         Expr::Set(x, e1) => {
             if !env.contains_key(x) {
                 panic!("Unbound variable identifier {}", x);
             }
-            compile_expr(e1, env, st_ptr, label_seq, loop_seq, curr_fun, funs, instrs);
+            compile_expr(e1, env, st_ptr, label_seq, loop_seq, instrs);
             let x_pos = *env.get(x).unwrap();
             instrs.push(Instr::IMov(
                 Val::RegOffset(Reg::RBP, x_pos),
@@ -900,7 +808,7 @@ fn compile_expr(
         }
         Expr::Block(es) => {
             for e1 in es {
-                compile_expr(e1, env, st_ptr, label_seq, loop_seq, curr_fun, funs, instrs);
+                compile_expr(e1, env, st_ptr, label_seq, loop_seq, instrs);
             }
         }
         Expr::Call(fun, es) => {
@@ -918,9 +826,7 @@ fn compile_expr(
 
             for (i, e1) in es.iter().enumerate() {
                 let new_st_ptr = st_ptr + (i as i32);
-                compile_expr(
-                    e1, env, new_st_ptr, label_seq, loop_seq, curr_fun, funs, instrs,
-                );
+                compile_expr(e1, env, new_st_ptr, label_seq, loop_seq, instrs);
                 instrs.push(Instr::IMov(
                     Val::RegOffset(Reg::RBP, new_st_ptr),
                     Val::Reg(Reg::RAX),
@@ -946,14 +852,12 @@ fn compile_expr(
             instrs.push(Instr::IAdd(Val::Reg(Reg::RSP), Val::Imm(8 * (1 + len))));
         }
         Expr::Fun(d) => {
-            compile_defn(env, d, label_seq, funs, instrs);
+            compile_defn(env, d, label_seq, instrs);
         }
         Expr::Vec(es) => {
             for (i, e1) in es.iter().enumerate() {
                 let new_st_ptr = st_ptr + (i as i32);
-                compile_expr(
-                    e1, env, new_st_ptr, label_seq, loop_seq, curr_fun, funs, instrs,
-                );
+                compile_expr(e1, env, new_st_ptr, label_seq, loop_seq, instrs);
                 instrs.push(Instr::IMov(
                     Val::RegOffset(Reg::RBP, new_st_ptr),
                     Val::Reg(Reg::RAX),
@@ -981,9 +885,7 @@ fn compile_expr(
             ));
         }
         Expr::VecGet(e_vec, e_index) => {
-            compile_expr(
-                e_vec, env, st_ptr, label_seq, loop_seq, curr_fun, funs, instrs,
-            );
+            compile_expr(e_vec, env, st_ptr, label_seq, loop_seq, instrs);
             compile_ptr_type_check(Val::Reg(Reg::RAX), instrs);
             compile_nil_ptr_check(Val::Reg(Reg::RAX), instrs);
             instrs.push(Instr::ISub(Val::Reg(Reg::RAX), Val::Imm(PTR_TAG)));
@@ -991,16 +893,7 @@ fn compile_expr(
                 Val::RegOffset(Reg::RBP, st_ptr),
                 Val::Reg(Reg::RAX),
             ));
-            compile_expr(
-                e_index,
-                env,
-                st_ptr + 1,
-                label_seq,
-                loop_seq,
-                curr_fun,
-                funs,
-                instrs,
-            );
+            compile_expr(e_index, env, st_ptr + 1, label_seq, loop_seq, instrs);
             compile_num_type_check(Val::Reg(Reg::RAX), instrs);
             compile_out_of_bound_check(
                 Val::Reg(Reg::RAX),
@@ -1017,9 +910,7 @@ fn compile_expr(
             instrs.push(Instr::IMov(Val::Reg(Reg::RAX), Val::RegOffset(Reg::RCX, 0)));
         }
         Expr::VecSet(e_vec, e_index, e_val) => {
-            compile_expr(
-                e_vec, env, st_ptr, label_seq, loop_seq, curr_fun, funs, instrs,
-            );
+            compile_expr(e_vec, env, st_ptr, label_seq, loop_seq, instrs);
             compile_ptr_type_check(Val::Reg(Reg::RAX), instrs);
             compile_nil_ptr_check(Val::Reg(Reg::RAX), instrs);
             instrs.push(Instr::ISub(Val::Reg(Reg::RAX), Val::Imm(PTR_TAG)));
@@ -1027,16 +918,7 @@ fn compile_expr(
                 Val::RegOffset(Reg::RBP, st_ptr),
                 Val::Reg(Reg::RAX),
             ));
-            compile_expr(
-                e_index,
-                env,
-                st_ptr + 1,
-                label_seq,
-                loop_seq,
-                curr_fun,
-                funs,
-                instrs,
-            );
+            compile_expr(e_index, env, st_ptr + 1, label_seq, loop_seq, instrs);
             compile_num_type_check(Val::Reg(Reg::RAX), instrs);
             compile_out_of_bound_check(
                 Val::Reg(Reg::RAX),
@@ -1054,16 +936,7 @@ fn compile_expr(
                 Val::RegOffset(Reg::RBP, st_ptr),
                 Val::Reg(Reg::RCX),
             ));
-            compile_expr(
-                e_val,
-                env,
-                st_ptr + 1,
-                label_seq,
-                loop_seq,
-                curr_fun,
-                funs,
-                instrs,
-            );
+            compile_expr(e_val, env, st_ptr + 1, label_seq, loop_seq, instrs);
             instrs.push(Instr::IMov(
                 Val::Reg(Reg::RCX),
                 Val::RegOffset(Reg::RBP, st_ptr),
@@ -1073,23 +946,23 @@ fn compile_expr(
     }
 }
 
-fn check_defn(d: &Defn, funs: &mut HashSet<String>, label_seq: &mut i32) -> String {
+fn check_defn(d: &Defn, label_seq: &mut i32) -> (String, String) {
     let Defn {
         name,
         params,
         body: _,
     } = d;
     let fun;
+    let fun_label;
     match name {
         Some(f) => {
             fun = f.clone();
-            if funs.contains(&fun) {
-                panic!("Duplicate function definition {}", fun);
-            }
-            funs.insert(fun.clone());
+            fun_label = format!("{}_{}", f, *label_seq);
+            *label_seq += 1;
         }
         None => {
-            fun = format!("$anon_{}", *label_seq);
+            fun = "$anon".to_string();
+            fun_label = format!("$anon_{}", *label_seq);
             *label_seq += 1;
         }
     }
@@ -1100,7 +973,7 @@ fn check_defn(d: &Defn, funs: &mut HashSet<String>, label_seq: &mut i32) -> Stri
         }
         param_set.insert(p.clone());
     }
-    fun
+    (fun, fun_label)
 }
 
 fn init_env(fun: String, params: &Vec<String>, xs: &Vec<String>) -> ImHashMap<String, i32> {
@@ -1135,14 +1008,14 @@ fn compile_free_vars(xs: &Vec<String>, instrs: &mut Vec<Instr>) {
 
 fn compile_closure(
     env: &ImHashMap<String, i32>,
-    fun: &String,
+    fun_label: &String,
     arity: i64,
     xs: &Vec<String>,
     instrs: &mut Vec<Instr>,
 ) {
     instrs.push(Instr::IMov(
         Val::Reg(Reg::RAX),
-        Val::Label(format!("fun_start_{}", fun)),
+        Val::Label(format!("fun_start_{}", fun_label)),
     ));
     instrs.push(Instr::IMov(Val::RegOffset(Reg::R12, 0), Val::Reg(Reg::RAX)));
     instrs.push(Instr::IMov(
@@ -1175,7 +1048,6 @@ fn compile_defn(
     env: &ImHashMap<String, i32>,
     d: &Defn,
     label_seq: &mut i32,
-    funs: &mut HashSet<String>,
     instrs: &mut Vec<Instr>,
 ) {
     let Defn {
@@ -1183,30 +1055,21 @@ fn compile_defn(
         params,
         body: e,
     } = d;
-    let fun = check_defn(d, funs, label_seq);
+    let (fun, fun_label) = check_defn(d, label_seq);
     let arity = params.len() as i64;
     let free_xs: Vec<String> = find_free_vars_defn(d).into_iter().collect();
     let new_env = init_env(fun.clone(), params, &free_xs);
 
-    instrs.push(Instr::JMP(Val::Label(format!("fun_finish_{}", fun))));
-    instrs.push(Instr::LABEL(format!("fun_start_{}", fun)));
+    instrs.push(Instr::JMP(Val::Label(format!("fun_finish_{}", fun_label))));
+    instrs.push(Instr::LABEL(format!("fun_start_{}", fun_label)));
     compile_entry(instrs, free_xs.len() as i32 + estimate_stack_size(e));
-    instrs.push(Instr::LABEL(format!("fun_body_{}", fun)));
+    instrs.push(Instr::LABEL(format!("fun_body_{}", fun_label)));
     compile_free_vars(&free_xs, instrs);
-    compile_expr(
-        e,
-        &new_env,
-        1 + free_xs.len() as i32,
-        label_seq,
-        -1,
-        &fun,
-        funs,
-        instrs,
-    );
-    instrs.push(Instr::LABEL(format!("fun_end_{}", fun)));
+    compile_expr(e, &new_env, 1 + free_xs.len() as i32, label_seq, -1, instrs);
+    instrs.push(Instr::LABEL(format!("fun_end_{}", fun_label)));
     compile_exit(instrs);
-    instrs.push(Instr::LABEL(format!("fun_finish_{}", fun)));
-    compile_closure(env, &fun, arity, &free_xs, instrs);
+    instrs.push(Instr::LABEL(format!("fun_finish_{}", fun_label)));
+    compile_closure(env, &fun_label, arity, &free_xs, instrs);
 }
 
 fn compile_entry(instrs: &mut Vec<Instr>, stack_size: i32) {
@@ -1268,7 +1131,6 @@ fn compile(prog: &Prog) -> String {
     let (defns, expr, fun_len) = check_prog(prog);
     let mut instrs = Vec::new();
     let mut env = ImHashMap::new();
-    let mut funs = HashSet::new();
     let mut label_seq = 0;
 
     instrs.push(Instr::LABEL(LABEL_ERROR.to_string()));
@@ -1277,8 +1139,9 @@ fn compile(prog: &Prog) -> String {
 
     compile_entry(&mut instrs, 2 + fun_len + estimate_stack_size(&expr));
     compile_in(&mut instrs);
+    env = env.update(INPUT.to_string(), 1);
     for (i, d) in defns.iter().enumerate() {
-        compile_defn(&env, &d, &mut label_seq, &mut funs, &mut instrs);
+        compile_defn(&env, &d, &mut label_seq, &mut instrs);
         if let Some(fun) = &d.name {
             instrs.push(Instr::IMov(
                 Val::RegOffset(Reg::RBP, 3 + i as i32),
@@ -1287,16 +1150,7 @@ fn compile(prog: &Prog) -> String {
             env = env.update(fun.clone(), 3 + i as i32);
         }
     }
-    compile_expr(
-        &expr,
-        &env,
-        3 + fun_len,
-        &mut label_seq,
-        -1,
-        "",
-        &mut funs,
-        &mut instrs,
-    );
+    compile_expr(&expr, &env, 3 + fun_len, &mut label_seq, -1, &mut instrs);
     compile_out(&mut instrs);
     compile_exit(&mut instrs);
 
@@ -1328,7 +1182,8 @@ fn find_free_vars_defn(d: &Defn) -> HashSet<String> {
 
 fn find_free_vars(e: &Expr) -> HashSet<String> {
     match e {
-        Expr::NIL | Expr::Input | Expr::Number(_) | Expr::Boolean(_) => HashSet::new(),
+        Expr::NIL | Expr::Number(_) | Expr::Boolean(_) => HashSet::new(),
+        Expr::Input => HashSet::from_iter([INPUT.to_string()]),
         Expr::Id(x) => HashSet::from_iter([x.clone()]),
         Expr::Fun(d) => find_free_vars_defn(d),
         Expr::Let(bs, e1) => {
